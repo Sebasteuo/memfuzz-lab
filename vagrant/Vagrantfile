@@ -1,0 +1,20 @@
+Vagrant.configure("2") do |config|
+  config.vm.box = "generic/ubuntu2204"
+  config.vm.provider :libvirt do |v|
+    v.memory = 4096
+    v.cpus   = 2
+  end
+
+  config.vm.provision "shell", inline: <<-SHELL
+    sudo apt-get update
+    sudo apt-get install -y qemu-system build-essential git
+    if [ ! -d /opt/AFLplusplus ]; then
+      git clone --depth 1 https://github.com/AFLplusplus/AFLplusplus /opt/AFLplusplus
+      cd /opt/AFLplusplus && make distrib
+      sudo ln -s /opt/AFLplusplus/{afl-fuzz,afl-gcc,afl-clang-fast} /usr/local/bin/
+    fi
+  SHELL
+
+  config.vm.synced_folder ".", "/home/vagrant/memfuzz-lab"
+end
+

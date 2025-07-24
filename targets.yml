@@ -1,0 +1,10 @@
+---
+
+#### 4. `targets.yml`
+
+```yaml
+png_parser:
+  language: C
+  build_script: targets/png_parser/build.sh
+  binary_path: targets/png_parser/build/pngparse
+  corpus_dir: targets/png_parser/corpus
