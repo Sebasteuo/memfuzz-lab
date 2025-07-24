@@ -12,19 +12,19 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/sebasteuo/memfuzz-lab:latest
-      options: --user 0            # todo el job se ejecuta como root
+      options: --user 0
     steps:
       - uses: actions/checkout@v4
 
       - name: Build target
-        run: bash "\$GITHUB_WORKSPACE/targets/png_parser/build.sh"
+        run: bash targets/png_parser/build.sh
 
       - name: Run AFL++
         run: |
           timeout 15m afl-fuzz \
-            -i "\$GITHUB_WORKSPACE/targets/png_parser/corpus" \
+            -i targets/png_parser/corpus \
             -o out -- \
-            "\$GITHUB_WORKSPACE/targets/png_parser/build/pngparse" @@
+            targets/png_parser/build/pngparse @@
 
       - name: Upload crashes
         if: success() || failure()
