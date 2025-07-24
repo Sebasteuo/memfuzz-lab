@@ -2,6 +2,7 @@ name: Fuzzing Pipeline
 on: [workflow_dispatch]
 
 jobs:
+  ## ── JOB 1 · FUZZ  ─────────────────────────────────────────
   fuzz:
     runs-on: ubuntu-latest
     container:
@@ -21,16 +22,63 @@ jobs:
             -o out -- \
             ./targets/png_parser/build/pngparse @@ || true
 
-      - name: Package crashes
+      - id: package
+        name: Package crashes
         run: |
           if [ -d out/default/crashes ] && [ "$(ls -A out/default/crashes)" ]; then
             tar -C out/default -czf crashes.tar.gz crashes
+            echo "has_crashes=true" >> $GITHUB_OUTPUT
           else
-            echo "No crashes to package."
+            echo "has_crashes=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Upload crashes
+        if: steps.package.outputs.has_crashes == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: crashes
           path: crashes.tar.gz
+
+  ## ── JOB 2 · ANALYZE & OPEN ISSUES  ───────────────────────
+  analyze:
+    needs: fuzz
+    if: needs.fuzz.outputs.has_crashes == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/sebasteuo/memfuzz-lab:latest
+      options: --user 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: crashes
+
+      - name: Install gh CLI
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends gh
+
+      - name: Extract & symbolize
+        run: |
+          tar -xzf crashes.tar.gz
+          mkdir reports
+          for f in crashes/id:*; do
+            name=$(basename "$f")
+            ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
+            ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
+            ./targets/png_parser/build/pngparse "$f" 2>&1 \
+              | /usr/lib/llvm-*/share/asan_symbolize/asan_symbolize.py \
+              > reports/"$name".txt || true
+          done
+
+      - name: Create GitHub issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for r in reports/*.txt; do
+            title=$(head -1 "$r" | cut -c1-120)
+            if ! gh issue list --state all --search "$title" | grep -q "$title"; then
+              gh issue create --title "Crash: $title" \
+                              --body "Automated crash report:\n\`\`\`\n$(cat "$r")\n\`\`\`"
+            fi
+          done
