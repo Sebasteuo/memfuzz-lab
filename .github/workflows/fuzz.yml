@@ -10,11 +10,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: List first 50 paths
-        run: |
-          echo "PWD = $(pwd)"
-          ls -R | head -50
-
       - name: Build target
         run: bash ./targets/png_parser/build.sh
 
@@ -26,9 +21,17 @@ jobs:
             -o out -- \
             ./targets/png_parser/build/pngparse @@
 
+      # 🔹 NUEVO: comprime los crashes para que no tengan ":" en el nombre
+      - name: Package crashes
+        if: success() || failure()
+        run: |
+          if [ -d out/default/crashes ] && [ "$(ls -A out/default/crashes)" ]; then
+            tar -C out/default -czf crashes.tar.gz crashes
+          fi
+
       - name: Upload crashes
         if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: crashes
-          path: out/default/crashes
+          path: crashes.tar.gz
