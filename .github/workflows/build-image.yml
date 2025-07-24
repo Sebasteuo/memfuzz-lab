@@ -17,9 +17,18 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+
+      # 🔐 Authenticate to GitHub Container Registry
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build and push the image
       - name: Build and push image
         uses: docker/build-push-action@v5
         with:
           context: ./docker
-          tags: ghcr.io/sebasteuo/memfuzz-lab:latest   # <-- todo minúscula
+          tags: ghcr.io/sebasteuo/memfuzz-lab:latest   # en minúscula
           push: true
