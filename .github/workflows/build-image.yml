@@ -1,0 +1,25 @@
+name: Build Docker image
+
+on:
+  push:
+    paths:
+      - 'docker/**'
+      - '.github/workflows/build-image.yml'
+  pull_request:
+    paths:
+      - 'docker/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          tags: ghcr.io/${{ github.repository }}:latest
+          push: true

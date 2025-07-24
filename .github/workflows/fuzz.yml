@@ -1,0 +1,31 @@
+name: Fuzzing Pipeline
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'targets/**'
+      - '.github/workflows/fuzz.yml'
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build target
+        run: bash targets/png_parser/build.sh
+
+      - name: Run AFL++
+        run: |
+          timeout 15m afl-fuzz -i targets/png_parser/corpus -o out -- \
+            targets/png_parser/build/pngparse @@
+
+      - name: Upload crashes
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crashes
+          path: out/default/crashes
