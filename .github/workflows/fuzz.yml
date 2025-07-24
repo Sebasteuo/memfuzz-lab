@@ -19,18 +19,17 @@ jobs:
           timeout 15m afl-fuzz \
             -i ./targets/png_parser/corpus \
             -o out -- \
-            ./targets/png_parser/build/pngparse @@
+            ./targets/png_parser/build/pngparse @@ || true
 
-      # 🔹 NUEVO: comprime los crashes para que no tengan ":" en el nombre
       - name: Package crashes
-        if: success() || failure()
         run: |
           if [ -d out/default/crashes ] && [ "$(ls -A out/default/crashes)" ]; then
             tar -C out/default -czf crashes.tar.gz crashes
+          else
+            echo "No crashes to package."
           fi
 
       - name: Upload crashes
-        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: crashes
