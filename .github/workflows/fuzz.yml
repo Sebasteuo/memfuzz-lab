@@ -12,17 +12,19 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/sebasteuo/memfuzz-lab:latest
-      options: --user 0           # ejecuta todo como root para evitar EACCES
+      options: --user 0            # todo el job se ejecuta como root
     steps:
       - uses: actions/checkout@v4
 
-      # Opcional: compila y fuzzing con el usuario “fuzz”
       - name: Build target
-        run: su - fuzz -c "bash targets/png_parser/build.sh"
+        run: bash "\$GITHUB_WORKSPACE/targets/png_parser/build.sh"
 
       - name: Run AFL++
-        run: su - fuzz -c "timeout 15m afl-fuzz -i targets/png_parser/corpus -o out -- \
-               targets/png_parser/build/pngparse @@"
+        run: |
+          timeout 15m afl-fuzz \
+            -i "\$GITHUB_WORKSPACE/targets/png_parser/corpus" \
+            -o out -- \
+            "\$GITHUB_WORKSPACE/targets/png_parser/build/pngparse" @@
 
       - name: Upload crashes
         if: success() || failure()
