@@ -16,10 +16,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 🔍 Paso de depuración: lista lo que realmente ve el runner
+      - name: Debug list
+        run: |
+          echo "Workspace path: ${{ github.workspace }}"
+          echo "Contenido bajo targets/:"
+          ls -R "${{ github.workspace }}/targets" || true
+
+      # 🛠️  Compila el objetivo
       - name: Build target
         run: |
           bash "${{ github.workspace }}/targets/png_parser/build.sh"
 
+      # 🚀 Ejecuta AFL++
       - name: Run AFL++
         run: |
           timeout 15m afl-fuzz \
@@ -27,6 +36,7 @@ jobs:
             -o out -- \
             "${{ github.workspace }}/targets/png_parser/build/pngparse" @@
 
+      # 📦 Sube crashes como artefacto
       - name: Upload crashes
         if: success() || failure()
         uses: actions/upload-artifact@v4
