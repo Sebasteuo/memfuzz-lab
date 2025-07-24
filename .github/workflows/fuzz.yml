@@ -6,11 +6,10 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/sebasteuo/memfuzz-lab:latest
-      options: --user 0      # ejecuta como root
+      options: --user 0
     steps:
       - uses: actions/checkout@v4
 
-      # Comprobamos que ahora sí ve la carpeta
       - name: List first 50 paths
         run: |
           echo "PWD = $(pwd)"
@@ -21,6 +20,7 @@ jobs:
 
       - name: Run AFL++
         run: |
+          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
           timeout 15m afl-fuzz \
             -i ./targets/png_parser/corpus \
             -o out -- \
