@@ -2,7 +2,7 @@ name: Fuzzing Pipeline
 on: [workflow_dispatch]
 
 jobs:
-  ## ── JOB 1 · FUZZ  ─────────────────────────────────────────
+  # ── JOB 1 · FUZZ ───────────────────────────────────────
   fuzz:
     runs-on: ubuntu-latest
     container:
@@ -27,9 +27,9 @@ jobs:
         run: |
           if [ -d out/default/crashes ] && [ "$(ls -A out/default/crashes)" ]; then
             tar -C out/default -czf crashes.tar.gz crashes
-            echo "has_crashes=true" >> $GITHUB_OUTPUT
+            echo "has_crashes=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_crashes=false" >> $GITHUB_OUTPUT
+            echo "has_crashes=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload crashes
@@ -39,7 +39,7 @@ jobs:
           name: crashes
           path: crashes.tar.gz
 
-  ## ── JOB 2 · ANALYZE & OPEN ISSUES  ───────────────────────
+  # ── JOB 2 · ANALYZE ────────────────────────────────────
   analyze:
     needs: fuzz
     if: needs.fuzz.outputs.has_crashes == 'true'
@@ -53,12 +53,12 @@ jobs:
         with:
           name: crashes
 
-      - name: Install gh CLI
+      - name: Install GitHub CLI
         run: |
           apt-get update -qq
           apt-get install -y --no-install-recommends gh
 
-      - name: Extract & symbolize
+      - name: Extract & symbolize crashes
         run: |
           tar -xzf crashes.tar.gz
           mkdir reports
@@ -67,7 +67,7 @@ jobs:
             ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
             ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
             ./targets/png_parser/build/pngparse "$f" 2>&1 \
-              | /usr/lib/llvm-*/share/asan_symbolize/asan_symbolize.py \
+              | /usr/bin/asan_symbolize-18 \
               > reports/"$name".txt || true
           done
 
