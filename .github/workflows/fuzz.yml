@@ -16,7 +16,7 @@ jobs:
       - name: Build target
         run: bash ./targets/${{ matrix.target }}/build.sh
 
-      - name: Run AFL++ (native or QEMU)
+      - name: Run AFL++
         run: |
           BIN=$(basename $(ls ./targets/${{ matrix.target }}/build))
           MODE=""
@@ -32,9 +32,9 @@ jobs:
         run: |
           if [ -d out/default/crashes ] && [ "$(ls -A out/default/crashes)" ]; then
             tar -C out/default -czf crashes-${{ matrix.target }}.tar.gz crashes
-            echo "has_crashes=true" >>"$GITHUB_OUTPUT"
+            echo "has_crashes=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_crashes=false" >>"$GITHUB_OUTPUT"
+            echo "has_crashes=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Upload crashes
@@ -52,8 +52,9 @@ jobs:
       options: --user 0
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4   # baja TODOS los artefactos
-        with: { pattern: crashes-* }
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: 'crashes-*'          # ¡comillas!
 
       - name: Install GitHub CLI
         run: |
@@ -76,7 +77,8 @@ jobs:
           done
 
       - name: Create GitHub Issues
-        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           for r in *.txt; do
             title=$(head -1 "$r" | cut -c1-120)
