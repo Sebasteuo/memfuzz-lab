@@ -6,6 +6,7 @@ RUN apt-get update && \
         afl++ build-essential python3 python3-pip python3-dev git wget unzip \
         libcapstone-dev libdistorm3-dev \
         yara libyara-dev libjansson-dev python3-yara && \
+        qemu-user-static binutils-multiarch && \
     rm -rf /var/lib/apt/lists/*
 
 # ---------- Volatility 3 ----------
