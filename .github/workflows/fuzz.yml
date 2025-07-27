@@ -66,6 +66,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -f crashes-png_parser.tar.gz ]; then
+            set +e
             mkdir work && tar -xzf crashes-png_parser.tar.gz -C work
             BIN=$(find ./targets/png_parser/build -type f -perm -111 | head -1)
 
