@@ -53,12 +53,18 @@ jobs:
           name: crashes-png_parser
           path: .
 
-      # ---------- volver a compilar para simbolizar ----------
+      # ---------- instala gh CLI y llvm-symbolizer ----------
+      - name: Install tools
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends gh llvm
+
+      # ---------- recompila binario ----------
       - name: Build png_parser (analyze)
         run: bash ./targets/png_parser/build.sh
 
-      # ---------- simbolizar y crear Issue ----------
-      - name: Symbolize & open Issue
+      # ---------- simboliza y abre Issue ----------
+      - name: Symbolize & create Issue
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -69,8 +75,7 @@ jobs:
             for f in $(find work/crashes -type f -name 'id:*'); do
               ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
               ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
-              "$BIN" "$f" 2>&1 | /usr/bin/asan_symbolize-18 \
-                > "$(basename "$f").txt" || true
+              "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
               title=$(head -1 "$(basename "$f").txt" | cut -c1-120)
               if ! gh issue list --state all --search "$title" | grep -q "$title"; then
                 gh issue create \
@@ -79,5 +84,5 @@ jobs:
               fi
             done
           else
-            echo "No crashes artifact — nothing to analyze."
+            echo "No crash artefact found — nothing to analyze."
           fi
