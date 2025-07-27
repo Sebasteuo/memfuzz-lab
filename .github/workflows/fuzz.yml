@@ -76,7 +76,7 @@ jobs:
               "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
 
               # ---------- título único: 1ª línea + timestamp ----------
-              summary=$(head -1 "$(basename "$f").txt" | cut -c1-120)
+              summary=$(grep -m1 -v "^$" "$(basename "$f").txt" | cut -c1-120)
               ts=$(date +%F-%H%M)
               title="Crash: $summary [$ts]"
 
@@ -88,13 +88,21 @@ jobs:
                 printf "**Target**: \`png_parser\`\n\n"
                 printf "**Input**: \`%s\`\n\n" "$crash_file"
 
-                printf "<details>\n<summary>Stack trace</summary>\n\n\`\`\`\n"
-                cat "$(basename "$f").txt"
-                printf "\n\`\`\`\n</details>\n\n"
+                printf "#### Stack trace\n\n\`\`\`\n";
+                cat "$(basename "$f").txt";
+                printf "\n\`\`\`\n\n";
 
-                printf "<details>\n<summary>Reproduce locally</summary>\n\n\`\`\`bash\n"
-                printf "./targets/png_parser/build/pngparse work/crashes/%s\n" "$crash_file"
-                printf "\`\`\`\n</details>\n"
+                printf "#### Reproduce locally\n\n\`\`\`bash\n";
+                printf "./targets/png_parser/build/pngparse work/crashes/%s\n" "$crash_file";
+                printf "\`\`\`\n";
+
+                printf "#### Stack trace\n\n\`\`\`\n";
+                cat "$(basename "$f").txt";
+                printf "\n\`\`\`\n\n";
+
+                printf "#### Reproduce locally\n\n\`\`\`bash\n";
+                printf "./targets/png_parser/build/pngparse work/crashes/%s\n" "$crash_file";
+                printf "\`\`\`\n";
               } > issue_body.md
 
               # ---------- crea Issue ----------
