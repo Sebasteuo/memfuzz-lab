@@ -75,7 +75,7 @@ jobs:
 
           shopt -s nullglob
 
-          for tar in crashes-*.tar.gz; do
+          for tar in $(find . -name "crashes-*.tar.gz"); do
 
             [[ -e "$tar" ]] || continue
 
