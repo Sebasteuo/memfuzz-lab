@@ -79,7 +79,7 @@ jobs:
 
             [[ -e "$tar" ]] || continue
 
-            target=${tar#crashes-}; target=${target%.tar.gz}
+            fname=$(basename "$tar"); target=${fname#crashes-}; target=${target%.tar.gz}
 
             tar -xzf "$tar" -C work
             echo "[DEBUG] Árbol después de extraer:"
