@@ -74,9 +74,6 @@ jobs:
             done
           done
 
-      - name: Create GitHub Issues
-        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
-        shell: bash
         run: |
           shopt -s nullglob
           for r in *.txt; do
