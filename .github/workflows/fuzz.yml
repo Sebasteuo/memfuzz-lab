@@ -74,7 +74,7 @@ jobs:
             target=${tar#crashes-}; target=${target%.tar.gz}
             mkdir -p work && tar -xzf "$tar" -C work
             BIN=$(basename $(ls ./targets/$target/build))
-            for f in work/crashes/*; do
+            for f in $(find work/crashes -type f); do
               [[ -e "$f" ]] || continue
               ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
               ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
