@@ -24,7 +24,7 @@ jobs:
             -o out -- \
             ./targets/png_parser/build/pngparse @@ || true
 
-      # ---------- empaquetar crashes si existen ----------
+      # ---------- empaqueta crashes si existen ----------
       - name: Package crashes
         shell: bash
         run: |
@@ -32,7 +32,7 @@ jobs:
             tar -C out/default -czf crashes-png_parser.tar.gz crashes
           fi
 
-      # ---------- subir artefacto solo si existe ----------
+      # ---------- sube artefacto solo si existe ----------
       - name: Upload crashes
         if: ${{ hashFiles('crashes-png_parser.tar.gz') != '' }}
         uses: actions/upload-artifact@v4
@@ -49,6 +49,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
+        with:
+          name: crashes-png_parser
+          path: .
+
+      # ---------- instala gh CLI + llvm-symbolizer ----------
       - name: Install tools
         run: |
           apt-get update -qq
@@ -57,21 +62,12 @@ jobs:
       # ---------- evita “dubious ownership” ----------
       - name: Configure git safe.directory
         run: git config --global --add safe.directory "$(pwd)"
-        with:
-          name: crashes-png_parser
-          path: .
-
-      # ---------- instala gh CLI y llvm-symbolizer ----------
-      - name: Install tools
-        run: |
-          apt-get update -qq
-          apt-get install -y --no-install-recommends gh llvm
 
       # ---------- recompila binario ----------
       - name: Build png_parser (analyze)
         run: bash ./targets/png_parser/build.sh
 
-      # ---------- simboliza y abre Issue ----------
+      # ---------- simboliza y crea Issue ----------
       - name: Symbolize & create Issue
         shell: bash
         env:
