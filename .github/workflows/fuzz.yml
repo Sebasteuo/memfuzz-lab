@@ -1,31 +1,4 @@
-name: Fuzzing Pipeline
-on: [workflow_dispatch]
-
-jobs:
-  fuzz:
-    strategy:
-      matrix:
-        target: [png_parser, qemu_elf]
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/sebasteuo/memfuzz-lab:latest
-      options: --user 0
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build target
-        run: bash ./targets/\${{ matrix.target }}/build.sh
-
-      - name: Run AFL++
-        run: |
-          BIN=\$(basename \$(ls ./targets/\${{ matrix.target }}/build))
-          MODE=""
-          [[ "\${{ matrix.target }}" == "qemu_elf" ]] && MODE="-Q"
-          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-          timeout 30m afl-fuzz \$MODE \
-            -i ./targets/\${{ matrix.target }}/corpus \
-            -o out -- \
-            ./targets/\${{ matrix.target }}/build/\$BIN @@ || true
+|| true
 
       - id: package
         name: Package crashes
