@@ -80,12 +80,12 @@ jobs:
               ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
               ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
               "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
-              title=$(head -1 "$(basename "$f").txt" | cut -c1-120)
-              if ! gh issue list --state all --search "$title" | grep -q "$title"; then
-                gh issue create \
-                  --title "Crash: $title" \
-                  --body "Target **png_parser**\n\n\`\`\`\n$(cat "$(basename "$f").txt")\n\`\`\`"
-              fi
+              # Añadimos marca temporal YYYY-MM-DD-hhmm para evitar duplicados
+              base_title=$(head -1 "$(basename "$f").txt" | cut -c1-120)
+              title="$base_title [$(date +%F-%H%M)]"
+              gh issue create \
+                --title "Crash: $title" \
+                --body "Target **png_parser**\n\n```\n$(cat "$(basename "$f").txt")\n```"
             done
           else
             echo "No crash artefact found — nothing to analyze."
