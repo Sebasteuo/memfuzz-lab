@@ -10,22 +10,75 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ---------- compila el objetivo ----------
       - name: Build png_parser
         run: bash ./targets/png_parser/build.sh
 
+      # ---------- fuzzea (timeout corto para pruebas) ----------
       - name: Run AFL++ (2 min)
         shell: bash
         run: |
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-          timeout 2m afl-fuzz -i ./targets/png_parser/corpus \
-            -o out -- ./targets/png_parser/build/pngparse @@ || true
+          timeout 2m afl-fuzz \
+            -i ./targets/png_parser/corpus \
+            -o out -- \
+            ./targets/png_parser/build/pngparse @@ || true
 
+      # ---------- empaqueta los crashes si existen ----------
       - name: Package crashes
-        if: ${{ hashFiles('out/default/crashes/id:*') != '' }}
-        run: tar -C out/default -czf crashes-png_parser.tar.gz crashes
+        shell: bash
+        run: |
+          if ls out/default/crashes/id:* 1>/dev/null 2>&1; then
+            tar -C out/default -czf crashes-png_parser.tar.gz crashes
+          fi
 
-      - uses: actions/upload-artifact@v4
-        if: ${{ hashFiles('out/default/crashes/id:*') != '' }}
+      # ---------- sube artefacto solo si se creó ----------
+      - name: Upload crashes
+        if: ${{ exists('crashes-png_parser.tar.gz') }}
+        uses: actions/upload-artifact@v4
         with:
           name: crashes-png_parser
           path: crashes-png_parser.tar.gz
+
+  analyze:
+    needs: fuzz
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/sebasteuo/memfuzz-lab:latest
+      options: --user 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: crashes-png_parser
+          path: .
+
+      # ---------- recompila binario para simbolizar ----------
+      - name: Build png_parser (analyze)
+        run: bash ./targets/png_parser/build.sh
+
+      # ---------- simboliza crashes y crea Issue ----------
+      - name: Symbolize & open Issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f crashes-png_parser.tar.gz ]; then
+            mkdir work && tar -xzf crashes-png_parser.tar.gz -C work
+            BIN=$(find ./targets/png_parser/build -type f -perm -111 | head -1)
+            for f in $(find work/crashes -type f -name 'id:*'); do
+              ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
+              ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
+              "$BIN" "$f" 2>&1 | /usr/bin/asan_symbolize-18 \
+                > "$(basename "$f").txt" || true
+
+              title=$(head -1 "$(basename "$f").txt" | cut -c1-120)
+              if ! gh issue list --state all --search "$title" | grep -q "$title"; then
+                gh issue create \
+                  --title "Crash: $title" \
+                  --body "Target **png_parser**\n\n\`\`\`\n$(cat "$(basename "$f").txt")\n\`\`\`"
+              fi
+            done
+          else
+            echo "No crashes artifact — nothing to analyze."
+          fi
