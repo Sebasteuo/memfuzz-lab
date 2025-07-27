@@ -55,8 +55,8 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: 'crashes-*'   # comodín entre comillas
-          path: '.'              # descarga en el directorio actual
+          pattern: 'crashes-*'
+          path: '.'          # descarga en el directorio actual
 
       - name: Install GitHub CLI
         run: |
@@ -64,13 +64,16 @@ jobs:
           apt-get install -y --no-install-recommends gh
 
       - name: Symbolize crashes
+        shell: bash          # usa bash (shopt disponible)
         run: |
-          shopt -s nullglob                    # evita fallo si no hay coincidencias
+          shopt -s nullglob
           for tar in crashes-*.tar.gz; do
+            [[ -e "$tar" ]] || continue
             target=${tar#crashes-}; target=${target%.tar.gz}
             mkdir -p work && tar -xzf "$tar" -C work
             BIN=$(basename $(ls ./targets/$target/build))
             for f in work/crashes/id:*; do
+              [[ -e "$f" ]] || continue
               ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
               ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
               ./targets/$target/build/$BIN "$f" 2>&1 \
@@ -82,6 +85,7 @@ jobs:
       - name: Create GitHub Issues
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
           shopt -s nullglob
           for r in *.txt; do
