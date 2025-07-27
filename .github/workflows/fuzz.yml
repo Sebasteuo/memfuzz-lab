@@ -1,0 +1,31 @@
+name: Fuzzing Pipeline
+on: [workflow_dispatch]
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/sebasteuo/memfuzz-lab:latest
+      options: --user 0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build png_parser
+        run: bash ./targets/png_parser/build.sh
+
+      - name: Run AFL++ (2 min)
+        shell: bash
+        run: |
+          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+          timeout 2m afl-fuzz -i ./targets/png_parser/corpus \
+            -o out -- ./targets/png_parser/build/pngparse @@ || true
+
+      - name: Package crashes
+        if: ${{ hashFiles('out/default/crashes/id:*') != '' }}
+        run: tar -C out/default -czf crashes-png_parser.tar.gz crashes
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ hashFiles('out/default/crashes/id:*') != '' }}
+        with:
+          name: crashes-png_parser
+          path: crashes-png_parser.tar.gz
