@@ -49,6 +49,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
+      - name: Install tools
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends gh llvm
+
+      # ---------- evita “dubious ownership” ----------
+      - name: Configure git safe.directory
+        run: git config --global --add safe.directory "$(pwd)"
         with:
           name: crashes-png_parser
           path: .
