@@ -10,11 +10,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ---------- build ----------
       - name: Build png_parser
         run: bash ./targets/png_parser/build.sh
 
-      # ---------- fuzz (timeout corto para prueba) ----------
       - name: Run AFL++ (2 min)
         shell: bash
         run: |
@@ -24,7 +22,6 @@ jobs:
             -o out -- \
             ./targets/png_parser/build/pngparse @@ || true
 
-      # ---------- empaqueta crashes si existen ----------
       - name: Package crashes
         shell: bash
         run: |
@@ -32,7 +29,6 @@ jobs:
             tar -C out/default -czf crashes-png_parser.tar.gz crashes
           fi
 
-      # ---------- sube artefacto solo si existe ----------
       - name: Upload crashes
         if: ${{ hashFiles('crashes-png_parser.tar.gz') != '' }}
         uses: actions/upload-artifact@v4
@@ -53,21 +49,17 @@ jobs:
           name: crashes-png_parser
           path: .
 
-      # ---------- instala gh CLI + llvm-symbolizer ----------
-      - name: Install tools
+      - name: Install gh CLI + llvm-symbolizer
         run: |
           apt-get update -qq
           apt-get install -y --no-install-recommends gh llvm
 
-      # ---------- evita “dubious ownership” ----------
       - name: Configure git safe.directory
         run: git config --global --add safe.directory "$(pwd)"
 
-      # ---------- recompila binario ----------
       - name: Build png_parser (analyze)
         run: bash ./targets/png_parser/build.sh
 
-      # ---------- simboliza y crea Issue ----------
       - name: Symbolize & create Issue
         shell: bash
         env:
@@ -76,16 +68,37 @@ jobs:
           if [ -f crashes-png_parser.tar.gz ]; then
             mkdir work && tar -xzf crashes-png_parser.tar.gz -C work
             BIN=$(find ./targets/png_parser/build -type f -perm -111 | head -1)
+
             for f in $(find work/crashes -type f -name 'id:*'); do
+              # ---------- genera stack-trace ----------
               ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
               ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
               "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
-              # Añadimos marca temporal YYYY-MM-DD-hhmm para evitar duplicados
-              base_title=$(head -1 "$(basename "$f").txt" | cut -c1-120)
-              title="$base_title [$(date +%F-%H%M)]"
-              gh issue create \
-                --title "Crash: $title" \
-                --body "Target **png_parser**\n\n```\n$(cat "$(basename "$f").txt")\n```"
+
+              # ---------- título único: 1ª línea + timestamp ----------
+              summary=$(head -1 "$(basename "$f").txt" | cut -c1-120)
+              ts=$(date +%F-%H%M)
+              title="Crash: $summary [$ts]"
+
+              crash_file=$(basename "$f")
+
+              # ---------- compone cuerpo Markdown ----------
+              {
+                printf "### 💥 Fuzzing crash detected\n\n"
+                printf "**Target**: \`png_parser\`\n\n"
+                printf "**Input**: \`%s\`\n\n" "$crash_file"
+
+                printf "<details>\n<summary>Stack trace</summary>\n\n\`\`\`\n"
+                cat "$(basename "$f").txt"
+                printf "\n\`\`\`\n</details>\n\n"
+
+                printf "<details>\n<summary>Reproduce locally</summary>\n\n\`\`\`bash\n"
+                printf "./targets/png_parser/build/pngparse work/crashes/%s\n" "$crash_file"
+                printf "\`\`\`\n</details>\n"
+              } > issue_body.md
+
+              # ---------- crea Issue ----------
+              gh issue create --title "$title" --body-file issue_body.md
             done
           else
             echo "No crash artefact found — nothing to analyze."
