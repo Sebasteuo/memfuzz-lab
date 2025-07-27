@@ -18,10 +18,9 @@ jobs:
 
       - name: Run AFL++
         run: |
-  shopt -s nullglob
           BIN=$(basename $(ls ./targets/${{ matrix.target }}/build))
           MODE=""
-          if [[ "${{ matrix.target }}" == "qemu_elf" ]]; then MODE="-Q"; fi
+          [[ "${{ matrix.target }}" == "qemu_elf" ]] && MODE="-Q"
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
           timeout 30m afl-fuzz $MODE \
             -i ./targets/${{ matrix.target }}/corpus \
@@ -31,7 +30,6 @@ jobs:
       - id: package
         name: Package crashes
         run: |
-  shopt -s nullglob
           if [ -d out/default/crashes ] && [ "$(ls -A out/default/crashes)" ]; then
             tar -C out/default -czf crashes-${{ matrix.target }}.tar.gz crashes
             echo "has_crashes=true" >> "$GITHUB_OUTPUT"
@@ -54,19 +52,20 @@ jobs:
       options: --user 0
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
-          pattern: 'crashes-*'          # ¡comillas!
+          pattern: 'crashes-*'   # comodín entre comillas
+          path: '.'              # descarga en el directorio actual
 
       - name: Install GitHub CLI
         run: |
-  shopt -s nullglob
           apt-get update -qq
           apt-get install -y --no-install-recommends gh
 
       - name: Symbolize crashes
         run: |
-  shopt -s nullglob
+          shopt -s nullglob                    # evita fallo si no hay coincidencias
           for tar in crashes-*.tar.gz; do
             target=${tar#crashes-}; target=${target%.tar.gz}
             mkdir -p work && tar -xzf "$tar" -C work
@@ -84,7 +83,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-  shopt -s nullglob
+          shopt -s nullglob
           for r in *.txt; do
             title=$(head -1 "$r" | cut -c1-120)
             if ! gh issue list --state all --search "$title" | grep -q "$title"; then
