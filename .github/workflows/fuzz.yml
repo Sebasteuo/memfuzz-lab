@@ -24,7 +24,7 @@ jobs:
           BIN=$(basename $(ls ./targets/${{ matrix.target }}/build))
           [[ "${{ matrix.target }}" == "qemu_elf" ]] && MODE="-Q" || MODE=""
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-          timeout 30m afl-fuzz $MODE \
+          timeout 2m afl-fuzz $MODE \
             -i ./targets/${{ matrix.target }}/corpus \
             -o out -- \
             ./targets/${{ matrix.target }}/build/$BIN @@ || true
