@@ -73,7 +73,7 @@ jobs:
               # ---------- genera stack-trace ----------
               ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
               ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
-              "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true || true
+              "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true || true || true
 
               # ---------- título único: 1ª línea + timestamp ----------
               summary=$(grep -m1 -v "^$" "$(basename "$f").txt" | cut -c1-120)
