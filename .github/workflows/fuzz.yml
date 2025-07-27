@@ -82,6 +82,8 @@ jobs:
             target=${tar#crashes-}; target=${target%.tar.gz}
 
             tar -xzf "$tar" -C work
+            echo "[DEBUG] Árbol después de extraer:"
+            find work -maxdepth 3 -type f | sed "s/^/  /"
 
             echo "[DEBUG] Contenido extraído de $tar:"
 
