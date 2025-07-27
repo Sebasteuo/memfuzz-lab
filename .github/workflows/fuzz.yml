@@ -10,11 +10,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ---------- compila el objetivo ----------
+      # ---------- build ----------
       - name: Build png_parser
         run: bash ./targets/png_parser/build.sh
 
-      # ---------- fuzzea (timeout corto para pruebas) ----------
+      # ---------- fuzz (timeout corto para prueba) ----------
       - name: Run AFL++ (2 min)
         shell: bash
         run: |
@@ -24,7 +24,7 @@ jobs:
             -o out -- \
             ./targets/png_parser/build/pngparse @@ || true
 
-      # ---------- empaqueta los crashes si existen ----------
+      # ---------- empaquetar crashes si existen ----------
       - name: Package crashes
         shell: bash
         run: |
@@ -32,9 +32,9 @@ jobs:
             tar -C out/default -czf crashes-png_parser.tar.gz crashes
           fi
 
-      # ---------- sube artefacto solo si se creó ----------
+      # ---------- subir artefacto solo si existe ----------
       - name: Upload crashes
-        if: ${{ exists('crashes-png_parser.tar.gz') }}
+        if: ${{ hashFiles('crashes-png_parser.tar.gz') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: crashes-png_parser
@@ -53,11 +53,11 @@ jobs:
           name: crashes-png_parser
           path: .
 
-      # ---------- recompila binario para simbolizar ----------
+      # ---------- volver a compilar para simbolizar ----------
       - name: Build png_parser (analyze)
         run: bash ./targets/png_parser/build.sh
 
-      # ---------- simboliza crashes y crea Issue ----------
+      # ---------- simbolizar y crear Issue ----------
       - name: Symbolize & open Issue
         shell: bash
         env:
@@ -71,7 +71,6 @@ jobs:
               ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
               "$BIN" "$f" 2>&1 | /usr/bin/asan_symbolize-18 \
                 > "$(basename "$f").txt" || true
-
               title=$(head -1 "$(basename "$f").txt" | cut -c1-120)
               if ! gh issue list --state all --search "$title" | grep -q "$title"; then
                 gh issue create \
