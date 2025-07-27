@@ -66,24 +66,52 @@ jobs:
           apt-get install -y --no-install-recommends gh
 
       - name: Symbolize crashes
+
         shell: bash
+
         run: |
+
+          mkdir -p work
+
           shopt -s nullglob
+
           for tar in crashes-*.tar.gz; do
+
             [[ -e "$tar" ]] || continue
+
             target=${tar#crashes-}; target=${target%.tar.gz}
-            mkdir -p work && tar -xzf "$tar" -C work
-            BIN=$(basename $(ls ./targets/$target/build))
+
+            tar -xzf "$tar" -C work
+
+            echo "[DEBUG] Contenido extraído de $tar:"
+
+            find work -maxdepth 3 -type f | sed "s/^/  /"
+
+            FULLBIN=$(find ./targets/$target/build -type f -perm -111 | head -1)
+
+            echo "[DEBUG] Usando ejecutable $FULLBIN"
+
             for f in $(find work/crashes -type f); do
-              [[ -e "$f" ]] || continue
+
+              echo "[DEBUG] Procesando $f"
+
               ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
+
               ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
-              ./targets/$target/build/$BIN "$f" 2>&1 \
-                | /usr/bin/asan_symbolize-18 \
+
+              "$FULLBIN" "$f" 2>&1 | /usr/bin/asan_symbolize-18 \
+
                 > "$(basename "$f").$target.txt" || true
+
             done
+
           done
+
           echo "=== TXT generados ==="
+
+          ls -1 *.txt || true
+
+          echo "====================="
           ls -1 *.txt || true
           echo "====================="
 
