@@ -69,11 +69,13 @@ jobs:
             mkdir work && tar -xzf crashes-png_parser.tar.gz -C work
             BIN=$(find ./targets/png_parser/build -type f -perm -111 | head -1)
 
+            # Desactiva exit on error durante el bucle
+            set +e
             for f in $(find work/crashes -type f -name 'id:*'); do
               # ---------- genera stack-trace ----------
               ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
               ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
-              "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true || true || true
+              "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
 
               # ---------- título único: 1ª línea + timestamp ----------
               summary=$(grep -m1 -v "^$" "$(basename "$f").txt" | cut -c1-120)
@@ -107,6 +109,8 @@ jobs:
 
               # ---------- crea Issue ----------
               gh issue create --title "$title" --body-file issue_body.md
+            # Reactiva exit on error
+            set -e
             done
           else
             echo "No crash artefact found — nothing to analyze."
