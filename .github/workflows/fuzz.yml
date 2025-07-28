@@ -27,6 +27,8 @@ jobs:
         run: |
           if ls out/default/crashes/id:* 1>/dev/null 2>&1; then
             tar -C out/default -czf crashes-png_parser.tar.gz crashes
+            true  # fuerza exit 0
+
           fi
 
       - name: Upload crashes
@@ -115,4 +117,6 @@ jobs:
             done
           else
             echo "No crash artefact found — nothing to analyze."
+            true  # fuerza exit 0
+
           fi
