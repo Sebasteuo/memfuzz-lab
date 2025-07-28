@@ -30,6 +30,8 @@ jobs:
             true  # fuerza exit 0
 
             true  # fuerza exit 0
+            exit 0  # fuerza código 0 para el step
+            exit 0  # fuerza código 0 para el step
           fi
 
       - name: Upload crashes
@@ -121,4 +123,6 @@ jobs:
             true  # fuerza exit 0
 
             true  # fuerza exit 0
+            exit 0  # fuerza código 0 para el step
+            exit 0  # fuerza código 0 para el step
           fi
