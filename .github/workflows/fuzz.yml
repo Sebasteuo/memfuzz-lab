@@ -90,6 +90,7 @@ jobs:
 
               # ---------- título único: 1ª línea + timestamp ----------
               summary=$(grep -m1 -v "^$" "$(basename "$f").txt" | cut -c1-120)
+              [ -z "$summary" ] && summary="ASAN SEGV crash"
               ts=$(date +%F-%H%M)
               title="Crash: $summary [$ts]"
 
