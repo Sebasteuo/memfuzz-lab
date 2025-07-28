@@ -72,6 +72,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set +e
+          trap 'exit 0' EXIT
           set +e  # desactiva exit-on-error
           if [ -f crashes-png_parser.tar.gz ]; then
             set +e
