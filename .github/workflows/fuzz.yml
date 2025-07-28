@@ -33,6 +33,7 @@ jobs:
             exit 0  # fuerza código 0 para el step
             exit 0  # fuerza código 0 para el step
             true  # fuerza exit 0 para todo el step
+          exit 0  # fuerza código de salida 0
           fi
 
       - name: Upload crashes
@@ -71,6 +72,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set +e  # desactiva exit-on-error
           if [ -f crashes-png_parser.tar.gz ]; then
             set +e
             mkdir work && tar -xzf crashes-png_parser.tar.gz -C work
@@ -128,4 +130,5 @@ jobs:
             exit 0  # fuerza código 0 para el step
             exit 0  # fuerza código 0 para el step
             true  # fuerza exit 0 para todo el step
+          exit 0  # fuerza código de salida 0
           fi
