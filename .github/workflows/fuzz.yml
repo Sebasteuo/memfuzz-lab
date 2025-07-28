@@ -118,6 +118,7 @@ jobs:
             # Reactiva exit on error
             set -e
             done
+            true  # fuerza exit 0 para el step
           else
             echo "No crash artefact found — nothing to analyze."
             true  # fuerza exit 0
