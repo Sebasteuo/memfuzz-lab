@@ -13,11 +13,11 @@ jobs:
       - name: Build png_parser
         run: bash ./targets/png_parser/build.sh
 
-      - name: Run AFL++ (2 min)
+      - name: Run AFL++ (30 min)
         shell: bash
         run: |
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-          timeout 2m afl-fuzz \
+          timeout 30m afl-fuzz \
             -i ./targets/png_parser/corpus \
             -o out -- \
             ./targets/png_parser/build/pngparse @@ || true
