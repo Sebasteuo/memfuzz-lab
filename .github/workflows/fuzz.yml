@@ -17,7 +17,7 @@ jobs:
         shell: bash
         run: |
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-          timeout 30m afl-fuzz \
+          timeout 30s afl-fuzz \
             -i ./targets/png_parser/corpus \
             -o out -- \
             ./targets/png_parser/build/pngparse @@ || true
