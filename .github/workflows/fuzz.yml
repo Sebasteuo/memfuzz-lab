@@ -56,3 +56,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file issue_body.md || true
         shell: bash
+run: ""
