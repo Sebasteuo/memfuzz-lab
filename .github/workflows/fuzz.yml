@@ -1,8 +1,6 @@
 name: Fuzzing Pipeline
-
 on:
   workflow_dispatch:
-
 jobs:
   fuzz:
     runs-on: ubuntu-latest
@@ -11,17 +9,14 @@ jobs:
       options: --user 0
     steps:
       - uses: actions/checkout@v4
-
       - name: Build png_parser
         run: bash ./targets/png_parser/build.sh
-
       - name: Run AFL++ (30 s)
         run: |
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
           timeout 30s afl-fuzz \
             -i ./targets/png_parser/corpus \
             -o out -- ./targets/png_parser/build/pngparse @@ || true
-
       # ---------- empaqueta solo si hay crashes ----------
       - name: Package crashes
         id: pkg
@@ -33,14 +28,12 @@ jobs:
           else
             echo "has_crash=false" >> "$GITHUB_OUTPUT"
           fi
-
       - name: Upload crashes
         if: steps.pkg.outputs.has_crash == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: crashes-png_parser
           path: crashes-png_parser.tar.gz
-
   analyze:
     needs: fuzz
     runs-on: ubuntu-latest
@@ -53,72 +46,13 @@ jobs:
         with:
           name: crashes-png_parser
           path: .
-
       - name: Install gh CLI + llvm-symbolizer
         run: |
           apt-get update -qq
           apt-get install -y --no-install-recommends gh llvm
-
       - name: Rebuild png_parser (symbols)
         run: bash ./targets/png_parser/build.sh
-
       - name: Symbolize & create Issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set +e
-          trap 'exit 0' EXIT
-
-          [ -f crashes-png_parser.tar.gz ] || exit 0
-          mkdir -p work
-          tar -xzf crashes-png_parser.tar.gz -C work
-
-          BIN=$(find ./targets/png_parser/build -type f -perm -111 | head -1)
-
-          for f in $(find work/crashes -type f -name 'id:*'); do
-            ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
-            ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
-            "$BIN" "$f" 2>&1 | tee "$(basename "$f").txt" >/dev/null || true
-            sleep 2
-            printf '%s\n' \
-
-              '### 💥 Fuzzing crash detected' \
-
-              '' \
-
-              '**Target**: \`png_parser\`' \
-
-              '' \
-
-              '**Input**: \`$crash_file\`' \
-
-              '' \
-
-              '#### Stack trace' \
-
-              '```' \
-
-              "$(cat "$(basename "$f").txt")" \
-
-              '```' \
-
-              '' \
-
-              '#### Reproduce locally' \
-
-              '```bash' \
-
-              "./targets/png_parser/build/pngparse work/crashes/$crash_file" \
-
-              '```' \
-
-            > issue_body.md
-
-            summary=$(grep -m1 -v '^$' "$(basename "$f").txt" | cut -c1-120)
-            [ -z "$summary" ] && summary="ASAN SEGV crash"
-            title="Crash: $summary [$(date +%F-%H%M)]"
-            crash_file=$(basename "$f")
-
-
-            gh issue create --title "$title" --body-file issue_body.md || true
-          done
+        run: "set +e\ntrap \"exit 0\" EXIT\n\n# Sal si no hay tar de crashes\n[ -f crashes-png_parser.tar.gz ] || exit 0\nmkdir -p work && tar -xzf crashes-png_parser.tar.gz -C work\n\nBIN=$(find ./targets/png_parser/build -type f -perm -111 | head -1)\n\nfor f in $(find work/crashes -type f -name 'id:*'); do\n  # ---------- genera stack-trace ----------\n  ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \\\n  ASAN_OPTIONS=symbolize=1:detect_leaks=0 \\\n  \"$BIN\" \"$f\" 2>&1 | tee \"$(basename \"$f\").txt\" >/dev/null || true\n  sleep 1\n\n  summary=$(grep -m1 -v '^$' \"$(basename \"$f\").txt\" | cut -c1-120)\n  [ -z \"$summary\" ] && summary=\"ASAN SEGV crash\"\n  title=\"Crash: $summary [$(date +%F-%H%M)]\"\n  crash_file=$(basename \"$f\")\n\n  cat <<EOF_MD > issue_body.md\n### \U0001F4A5 Fuzzing crash detected\n\n**Target**: \\`png_parser\\`\n\n**Input**: \\`$crash_file\\`\n\n#### Stack trace\n\\`\\`\\`\n$(cat \"$(basename \"$f\").txt\")\n\\`\\`\\`\n\n#### Reproduce locally\n\\`\\`\\`bash\n./targets/png_parser/build/pngparse work/crashes/$crash_file\n\\`\\`\\`\nEOF_MD\n\n  gh issue create --title \"$title\" --body-file issue_body.md || true\ndone"
