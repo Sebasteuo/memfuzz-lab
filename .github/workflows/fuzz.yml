@@ -17,7 +17,7 @@ jobs:
       - name: Build png_parser
         run: bash ./targets/png_parser/build.sh
 
-      # ---------- Run AFL++ (30 s para pruebas) ----------
+      # ---------- Run AFL++ (30 s de prueba) ----------
       - name: Run AFL++ (30 s)
         run: |
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
@@ -63,10 +63,9 @@ jobs:
       - name: Symbolize & create Issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
         run: |
           set +e
-          trap 'exit 0' EXIT          # nunca fallar el step
+          trap 'exit 0' EXIT
 
           [ -f crashes-png_parser.tar.gz ] || exit 0
           mkdir -p work
@@ -75,13 +74,12 @@ jobs:
           BIN=$(find ./targets/png_parser/build -type f -perm -111 | head -1)
 
           for f in $(find work/crashes -type f -name 'id:*'); do
-            # ---------- genera stack‑trace ----------
+            # ----- stack trace -----
             ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
             ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
             "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
             sleep 2
 
-            # ---------- título único ----------
             summary=$(grep -m1 -v '^$' "$(basename "$f").txt" | cut -c1-120)
             [ -z "$summary" ] && summary="ASAN SEGV crash"
             title="Crash: $summary [$(date +%F-%H%M)]"
