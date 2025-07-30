@@ -54,5 +54,5 @@ jobs:
         run: bash ./targets/png_parser/build.sh
       - name: Symbolize & create Issue
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file issue_body.md || true
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file issue_body.md || true
+        shell: bash
