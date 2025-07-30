@@ -87,6 +87,7 @@ jobs:
               ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
               ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
               "$BIN" "$f" >"$BIN" "$f" 2>&1 > "$(basename "$f").txt" "$(basename "$f").txt" || true
+              sleep 2
 
               # ---------- título único: 1ª línea + timestamp ----------
               summary=$(grep -m1 -v "^$" "$(basename "$f").txt" | cut -c1-120)
@@ -98,40 +99,3 @@ jobs:
 
               # ---------- compone cuerpo Markdown ----------
               {
-                printf "### 💥 Fuzzing crash detected\n\n"
-                printf "**Target**: \`png_parser\`\n\n"
-                printf "**Input**: \`%s\`\n\n" "$crash_file"
-
-                printf "#### Stack trace\n\n\`\`\`\n";
-                cat "$(basename "$f").txt";
-                printf "\n\`\`\`\n\n";
-
-                printf "#### Reproduce locally\n\n\`\`\`bash\n";
-                printf "./targets/png_parser/build/pngparse work/crashes/%s\n" "$crash_file";
-                printf "\`\`\`\n";
-
-                printf "#### Stack trace\n\n\`\`\`\n";
-                cat "$(basename "$f").txt";
-                printf "\n\`\`\`\n\n";
-
-                printf "#### Reproduce locally\n\n\`\`\`bash\n";
-                printf "./targets/png_parser/build/pngparse work/crashes/%s\n" "$crash_file";
-                printf "\`\`\`\n";
-              } > issue_body.md
-
-              # ---------- crea Issue ----------
-              gh issue create --title "$title" --body-file issue_body.md
-            # Reactiva exit on error
-            set -e
-            done
-            true  # fuerza exit 0 para el step
-          else
-            echo "No crash artefact found — nothing to analyze."
-            true  # fuerza exit 0
-
-            true  # fuerza exit 0
-            exit 0  # fuerza código 0 para el step
-            exit 0  # fuerza código 0 para el step
-            true  # fuerza exit 0 para todo el step
-          exit 0  # fuerza código de salida 0
-          fi
