@@ -1,5 +1,7 @@
 name: Fuzzing Pipeline
-on: [workflow_dispatch]
+
+on:
+  workflow_dispatch:
 
 jobs:
   fuzz:
@@ -7,34 +9,26 @@ jobs:
     container:
       image: ghcr.io/sebasteuo/memfuzz-lab:latest
       options: --user 0
+
     steps:
       - uses: actions/checkout@v4
 
+      # ---------- Build target ----------
       - name: Build png_parser
         run: bash ./targets/png_parser/build.sh
 
-      - name: Run AFL++ (30 min)
-        shell: bash
+      # ---------- Run AFL++ (30 s para pruebas) ----------
+      - name: Run AFL++ (30 s)
         run: |
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
           timeout 30s afl-fuzz \
             -i ./targets/png_parser/corpus \
-            -o out -- \
-            ./targets/png_parser/build/pngparse @@ || true
+            -o out -- ./targets/png_parser/build/pngparse @@ || true
 
+      # ---------- Package crashes ----------
       - name: Package crashes
-        shell: bash
-        run: |
-          if ls out/default/crashes/id:* 1>/dev/null 2>&1; then
-            tar -C out/default -czf crashes-png_parser.tar.gz crashes
-            true  # fuerza exit 0
-
-            true  # fuerza exit 0
-            exit 0  # fuerza código 0 para el step
-            exit 0  # fuerza código 0 para el step
-            true  # fuerza exit 0 para todo el step
-          exit 0  # fuerza código de salida 0
-          fi
+        if: ${{ hashFiles('out/default/crashes/id:*') != '' }}
+        run: tar -C out/default -czf crashes-png_parser.tar.gz crashes
 
       - name: Upload crashes
         if: ${{ hashFiles('crashes-png_parser.tar.gz') != '' }}
@@ -49,6 +43,7 @@ jobs:
     container:
       image: ghcr.io/sebasteuo/memfuzz-lab:latest
       options: --user 0
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -61,42 +56,54 @@ jobs:
           apt-get update -qq
           apt-get install -y --no-install-recommends gh llvm
 
-      - name: Configure git safe.directory
-        run: git config --global --add safe.directory "$(pwd)"
-
-      - name: Build png_parser (analyze)
+      - name: Rebuild target (symbols)
         run: bash ./targets/png_parser/build.sh
 
+      # ---------- Symbolize & create Issue ----------
       - name: Symbolize & create Issue
-        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
           set +e
-          trap 'exit 0' EXIT
-          set +e  # desactiva exit-on-error
-          if [ -f crashes-png_parser.tar.gz ]; then
-            set +e
-            mkdir work && tar -xzf crashes-png_parser.tar.gz -C work
-            BIN=$(find ./targets/png_parser/build -type f -perm -111 | head -1)
+          trap 'exit 0' EXIT          # nunca fallar el step
 
-            # Desactiva exit on error durante el bucle
-            set +e
-            for f in $(find work/crashes -type f -name 'id:*'); do
-              # ---------- genera stack-trace ----------
-              ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
-              ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
-              "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
-              ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
-              sleep 2
+          [ -f crashes-png_parser.tar.gz ] || exit 0
+          mkdir -p work
+          tar -xzf crashes-png_parser.tar.gz -C work
 
-              # ---------- título único: 1ª línea + timestamp ----------
-              summary=$(grep -m1 -v "^$" "$(basename "$f").txt" | cut -c1-120)
-              [ -z "$summary" ] && summary="ASAN SEGV crash"
-              ts=$(date +%F-%H%M)
-              title="Crash: $summary [$ts]"
+          BIN=$(find ./targets/png_parser/build -type f -perm -111 | head -1)
 
-              crash_file=$(basename "$f")
+          for f in $(find work/crashes -type f -name 'id:*'); do
+            # ---------- genera stack‑trace ----------
+            ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
+            ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
+            "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
+            sleep 2
 
-              # ---------- compone cuerpo Markdown ----------
-              {
+            # ---------- título único ----------
+            summary=$(grep -m1 -v '^$' "$(basename "$f").txt" | cut -c1-120)
+            [ -z "$summary" ] && summary="ASAN SEGV crash"
+            title="Crash: $summary [$(date +%F-%H%M)]"
+            crash_file=$(basename "$f")
+
+cat > issue_body.md <<EOF_MD
+### 💥 Fuzzing crash detected
+
+**Target**: \`png_parser\`
+
+**Input**: \`$crash_file\`
+
+#### Stack trace
+\`\`\`
+$(cat "$(basename "$f").txt")
+\`\`\`
+
+#### Reproduce locally
+\`\`\`bash
+./targets/png_parser/build/pngparse work/crashes/$crash_file
+\`\`\`
+EOF_MD
+
+            gh issue create --title "$title" --body-file issue_body.md || true
+          done
