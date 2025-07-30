@@ -1,54 +1,85 @@
 name: Fuzzing Pipeline
 
-on:
+"on":
   workflow_dispatch:
+  # Programa la ejecución diaria a las 02:00 UTC (20:00 América/Costa_Rica)
+  schedule:
+    - cron: '0 2 * * *'
 
 jobs:
+  # Fuzzing job: ejecuta AFL++ para cada objetivo definido en la matriz
   fuzz:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - name: png_parser
+            build_script: ./targets/png_parser/build.sh
+            corpus: ./targets/png_parser/corpus
+            run_cmd: "./targets/png_parser/build/pngparse"
+          - name: qemu_elf
+            build_script: ./targets/qemu_elf/build.sh
+            corpus: ./targets/qemu_elf/corpus
+            run_cmd: "qemu-arm ./targets/qemu_elf/build/mini_png"
     container:
       image: ghcr.io/sebasteuo/memfuzz-lab:latest
       options: --user 0
-
     steps:
       - uses: actions/checkout@v4
 
-      # ---------- Build target ----------
-      - name: Build png_parser
-        run: bash ./targets/png_parser/build.sh
+      # Compila el objetivo definido en la matriz
+      - name: Build target
+        run: bash ${{ matrix.target.build_script }}
 
-      # ---------- Run AFL++ (30 s para pruebas) ----------
-      - name: Run AFL++ (30 s)
+      # Ejecuta AFL++ en modo QEMU (-Q) para compatibilidad con ARM y otras arquitecturas
+      # Ajustado a 30 s para pruebas rápidas
+      - name: Run AFL++ (prueba corta)
         run: |
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-          timeout 30s afl-fuzz \
-            -i ./targets/png_parser/corpus \
-            -o out -- ./targets/png_parser/build/pngparse @@ || true
+          timeout 30s afl-fuzz -Q \
+            -i ${{ matrix.target.corpus }} \
+            -o out_${{ matrix.target.name }} -- \
+            ${{ matrix.target.run_cmd }} @@ || true
 
-      # ---------- Package crashes ----------
+      # Empaqueta los crashes si existen
       - name: Package crashes
-        if: ${{ hashFiles('out/default/crashes/id:*') != '' }}
-        run: tar -C out/default -czf crashes-png_parser.tar.gz crashes
+        run: |
+          CRASH_DIR="out_${{ matrix.target.name }}/default/crashes"
+          if ls "$CRASH_DIR"/id:* 1> /dev/null 2>&1; then
+            tar -C "out_${{ matrix.target.name }}/default" -czf crashes-${{ matrix.target.name }}.tar.gz crashes
+          fi
 
+      # Sube el artefacto de crashes; ignora si no existe
       - name: Upload crashes
-        if: ${{ hashFiles('crashes-png_parser.tar.gz') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: crashes-png_parser
-          path: crashes-png_parser.tar.gz
+          name: crashes-${{ matrix.target.name }}
+          path: crashes-${{ matrix.target.name }}.tar.gz
+          if-no-files-found: ignore
 
+  # Análisis de crashes: descarga el artefacto, simboliza y abre Issues
   analyze:
     needs: fuzz
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - name: png_parser
+            build_script: ./targets/png_parser/build.sh
+            corpus: ./targets/png_parser/corpus
+            run_cmd: "./targets/png_parser/build/pngparse"
+          - name: qemu_elf
+            build_script: ./targets/qemu_elf/build.sh
+            corpus: ./targets/qemu_elf/corpus
+            run_cmd: "qemu-arm ./targets/qemu_elf/build/mini_png"
     container:
       image: ghcr.io/sebasteuo/memfuzz-lab:latest
       options: --user 0
-
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: crashes-png_parser
+          name: crashes-${{ matrix.target.name }}
           path: .
 
       - name: Install gh CLI + llvm-symbolizer
@@ -56,26 +87,33 @@ jobs:
           apt-get update -qq
           apt-get install -y --no-install-recommends gh llvm
 
-      - name: Rebuild png_parser (symbols)
-        run: bash ./targets/png_parser/build.sh
+      # Recompila el objetivo con símbolos de depuración
+      - name: Rebuild target (symbols)
+        run: bash ${{ matrix.target.build_script }}
 
-      # ---------- Symbolize & create Issue ----------
+      # Simboliza cada crash y crea Issues
       - name: Symbolize & create Issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          trap 'exit 0' EXIT      # nunca fallar el step
+          trap 'exit 0' EXIT
 
-          [ -f crashes-png_parser.tar.gz ] || exit 0
+          # Si no hay archivo de crashes, salir silenciosamente
+          [ -f crashes-${{ matrix.target.name }}.tar.gz ] || exit 0
           mkdir -p work
-          tar -xzf crashes-png_parser.tar.gz -C work
+          tar -xzf crashes-${{ matrix.target.name }}.tar.gz -C work
 
-          BIN=$(find ./targets/png_parser/build -type f -perm -111 | head -1)
+          # Determina la ruta del binario ejecutable
+          BIN=$(find ./targets/${{ matrix.target.name }}/build -type f -perm -111 | head -1)
+
+          # Comando para ejecutar el binario (para reproducir el fallo)
+          RUN_CMD="${{ matrix.target.run_cmd }}"
 
           for f in $(find work/crashes -type f -name 'id:*'); do
             # ---------- genera stack‑trace ----------
-            ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \            "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
+            ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
+              "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
             sleep 2
 
             summary=$(grep -m1 -v '^$' "$(basename "$f").txt" | cut -c1-120)
@@ -84,22 +122,22 @@ jobs:
             crash_file=$(basename "$f")
 
             cat > issue_body.md <<EOF_MD
-          ### 💥 Fuzzing crash detected
+              ### 💥 Fuzzing crash detected
 
-          **Target**: \`png_parser\`
+              **Target**: \`${{ matrix.target.name }}\`
 
-          **Input**: \`\`
+              **Input**: \`$crash_file\`
 
-          #### Stack trace
-          \`\`\`
-          1000 4 24 27 30 46 101 125 1000cat "1000 4 24 27 30 46 101 125 1000basename "").txt")
-          \`\`\`
+              #### Stack trace
+              \`\`\`
+              $(cat "$(basename "$f").txt")
+              \`\`\`
 
-          #### Reproduce locally
-          \`\`\`bash
-          ./targets/png_parser/build/pngparse work/crashes/
-          \`\`\`
-          EOF_MD
+              #### Reproduce locally
+              \`\`\`bash
+              $RUN_CMD work/crashes/$crash_file
+              \`\`\`
+              EOF_MD
 
             gh issue create --title "$title" --body-file issue_body.md || true
           done
