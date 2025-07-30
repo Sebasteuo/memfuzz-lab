@@ -75,9 +75,7 @@ jobs:
 
           for f in $(find work/crashes -type f -name 'id:*'); do
             # ---------- genera stack‑trace ----------
-            ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
-            ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
-            "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
+            ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \            "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
             sleep 2
 
             summary=$(grep -m1 -v '^$' "$(basename "$f").txt" | cut -c1-120)
@@ -86,22 +84,22 @@ jobs:
             crash_file=$(basename "$f")
 
             cat > issue_body.md <<EOF_MD
-### 💥 Fuzzing crash detected
+          ### 💥 Fuzzing crash detected
 
-**Target**: \`png_parser\`
+          **Target**: \`png_parser\`
 
-**Input**: \`$crash_file\`
+          **Input**: \`\`
 
-#### Stack trace
-\`\`\`
-$(cat "$(basename "$f").txt")
-\`\`\`
+          #### Stack trace
+          \`\`\`
+          1000 4 24 27 30 46 101 125 1000cat "1000 4 24 27 30 46 101 125 1000basename "").txt")
+          \`\`\`
 
-#### Reproduce locally
-\`\`\`bash
-./targets/png_parser/build/pngparse work/crashes/$crash_file
-\`\`\`
-EOF_MD
+          #### Reproduce locally
+          \`\`\`bash
+          ./targets/png_parser/build/pngparse work/crashes/
+          \`\`\`
+          EOF_MD
 
             gh issue create --title "$title" --body-file issue_body.md || true
           done
