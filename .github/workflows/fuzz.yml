@@ -17,7 +17,7 @@ jobs:
       - name: Build png_parser
         run: bash ./targets/png_parser/build.sh
 
-      # ---------- Run AFL++ (30 s de prueba) ----------
+      # ---------- Run AFL++ (30 s para pruebas) ----------
       - name: Run AFL++ (30 s)
         run: |
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
@@ -56,7 +56,7 @@ jobs:
           apt-get update -qq
           apt-get install -y --no-install-recommends gh llvm
 
-      - name: Rebuild target (symbols)
+      - name: Rebuild png_parser (symbols)
         run: bash ./targets/png_parser/build.sh
 
       # ---------- Symbolize & create Issue ----------
@@ -65,7 +65,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          trap 'exit 0' EXIT
+          trap 'exit 0' EXIT      # nunca fallar el step
 
           [ -f crashes-png_parser.tar.gz ] || exit 0
           mkdir -p work
@@ -74,7 +74,7 @@ jobs:
           BIN=$(find ./targets/png_parser/build -type f -perm -111 | head -1)
 
           for f in $(find work/crashes -type f -name 'id:*'); do
-            # ----- stack trace -----
+            # ---------- genera stack‑trace ----------
             ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
             ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
             "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
@@ -85,7 +85,7 @@ jobs:
             title="Crash: $summary [$(date +%F-%H%M)]"
             crash_file=$(basename "$f")
 
-cat > issue_body.md <<EOF_MD
+            cat > issue_body.md <<EOF_MD
 ### 💥 Fuzzing crash detected
 
 **Target**: \`png_parser\`
