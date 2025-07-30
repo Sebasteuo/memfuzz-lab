@@ -80,29 +80,45 @@ jobs:
             ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
             "$BIN" "$f" 2>&1 | tee "$(basename "$f").txt" >/dev/null || true
             sleep 2
+            printf '%s\n' \
+
+              '### 💥 Fuzzing crash detected' \
+
+              '' \
+
+              '**Target**: \`png_parser\`' \
+
+              '' \
+
+              '**Input**: \`$crash_file\`' \
+
+              '' \
+
+              '#### Stack trace' \
+
+              '```' \
+
+              "$(cat "$(basename "$f").txt")" \
+
+              '```' \
+
+              '' \
+
+              '#### Reproduce locally' \
+
+              '```bash' \
+
+              "./targets/png_parser/build/pngparse work/crashes/$crash_file" \
+
+              '```' \
+
+            > issue_body.md
 
             summary=$(grep -m1 -v '^$' "$(basename "$f").txt" | cut -c1-120)
             [ -z "$summary" ] && summary="ASAN SEGV crash"
             title="Crash: $summary [$(date +%F-%H%M)]"
             crash_file=$(basename "$f")
 
-cat > issue_body.md <<EOF_MD
-### 💥 Fuzzing crash detected
-
-**Target**: \`png_parser\`
-
-**Input**: \`$crash_file\`
-
-#### Stack trace
-\`\`\`
-$(cat "$(basename "$f").txt")
-\`\`\`
-
-#### Reproduce locally
-\`\`\`bash
-./targets/png_parser/build/pngparse work/crashes/$crash_file
-\`\`\`
-EOF_MD
 
             gh issue create --title "$title" --body-file issue_body.md || true
           done
