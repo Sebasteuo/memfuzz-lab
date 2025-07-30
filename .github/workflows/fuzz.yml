@@ -86,6 +86,8 @@ jobs:
               # ---------- genera stack-trace ----------
               ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
               ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
+              "$BIN" "$f" 2>&1 > "$(basename "$f").txt" || true
+              ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
               "$BIN" "$f" >"$BIN" "$f" 2>&1 > "$(basename "$f").txt" "$(basename "$f").txt" || true
               sleep 2
 
