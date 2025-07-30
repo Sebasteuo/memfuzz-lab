@@ -81,6 +81,7 @@ jobs:
         with:
           name: crashes-${{ matrix.target.name }}
           path: .
+          if-no-files-found: ignore
 
       - name: Install gh CLI + llvm-symbolizer
         run: |
