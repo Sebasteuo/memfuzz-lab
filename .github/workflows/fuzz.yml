@@ -1,7 +1,7 @@
 name: Fuzzing Pipeline
-name: Fuzzing Pipeline
 on:
   workflow_dispatch:
+
 jobs:
   fuzz:
     runs-on: ubuntu-latest
@@ -10,31 +10,36 @@ jobs:
       options: --user 0
     steps:
       - uses: actions/checkout@v4
+
       - name: Build png_parser
         run: bash ./targets/png_parser/build.sh
-      - name: Run AFL++ (30 s)
+
+      - name: Run AFL++ (30 s)
         run: |
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
           timeout 30s afl-fuzz \
             -i ./targets/png_parser/corpus \
             -o out -- ./targets/png_parser/build/pngparse @@ || true
-      # ---------- empaqueta solo si hay crashes ----------
+
+      # empaqueta sólo si hay crashes
       - name: Package crashes
         id: pkg
         shell: bash
         run: |
-          if [ -d out/default/crashes ] && compgen -G 'out/default/crashes/id:*' > /dev/null; then
+          if compgen -G 'out/default/crashes/id:*' > /dev/null; then
             tar -C out/default -czf crashes-png_parser.tar.gz crashes
-            echo "has_crash=true" >> "$GITHUB_OUTPUT"
+            echo "has_crash=true" >> $GITHUB_OUTPUT
           else
-            echo "has_crash=false" >> "$GITHUB_OUTPUT"
+            echo "has_crash=false" >> $GITHUB_OUTPUT
           fi
+
       - name: Upload crashes
         if: steps.pkg.outputs.has_crash == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: crashes-png_parser
           path: crashes-png_parser.tar.gz
+
   analyze:
     needs: fuzz
     runs-on: ubuntu-latest
@@ -47,8 +52,14 @@ jobs:
         with:
           name: crashes-png_parser
           path: .
-      - name: Install gh CLI + llvm-symbolizer
-        run: |
-          apt-get update -qq
-          apt-get install -y --no-install-recommends gh llvm
+
       - name: Rebuild png_parser (symbols)
+        run: bash ./targets/png_parser/build.sh
+
+      # **** BLOQUE FIJO (de momento sólo eco) ****
+      - name: Symbolize & create Issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "✅ Workflow válido – ya puedes volver a poner la lógica real"
