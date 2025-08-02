@@ -52,10 +52,3 @@ jobs:
           apt-get update -qq
           apt-get install -y --no-install-recommends gh llvm
       - name: Rebuild png_parser (symbols)
-- name: Symbolize & create Issue
-  shell: bash
-  env:
-    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  run: |
-    echo "✅ step ok – compilación correcta"
-        run: bash ./targets/png_parser/build.sh
