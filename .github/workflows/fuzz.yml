@@ -57,9 +57,3 @@ jobs:
         run: bash ./targets/png_parser/build.sh
 
       # **** BLOQUE FIJO (de momento sólo eco) ****
-      - name: Symbolize & create Issue
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "✅ Workflow válido – ya puedes volver a poner la lógica real"
