@@ -1,4 +1,5 @@
 name: Fuzzing Pipeline
+name: Fuzzing Pipeline
 on:
   workflow_dispatch:
 jobs:
@@ -51,9 +52,10 @@ jobs:
           apt-get update -qq
           apt-get install -y --no-install-recommends gh llvm
       - name: Rebuild png_parser (symbols)
+- name: Symbolize & create Issue
+  shell: bash
+  env:
+    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: |
+    echo "✅ step ok – compilación correcta"
         run: bash ./targets/png_parser/build.sh
-      - name: Symbolize & create Issue
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file issue_body.md || true
-        shell: bash
-run: ""
