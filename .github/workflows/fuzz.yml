@@ -63,6 +63,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
         run: ./scripts/symbolize_and_issue.sh
-        run: bash ./targets/png_parser/build.sh
-
       # **** BLOQUE FIJO (de momento sólo eco) ****
