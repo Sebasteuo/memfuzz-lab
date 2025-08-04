@@ -26,22 +26,66 @@ jobs:
         run: bash ./targets/png_parser/build.sh
 
       - name: Run AFL++ (30 s)
+        env:
+
+          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
         run: |
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-          timeout 30s afl-fuzz \
+          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 timeout 30s afl-fuzz \
             -i ./targets/png_parser/corpus \
             -o out -- ./targets/png_parser/build/pngparse @@ || true
 
       # empaqueta sólo si hay crashes
+      - name: Debug list out\/default
+
+        shell: bash
+
+        run: |
+
+          echo "Contenido de out/default antes del tar:";
+
+          ls -lR out/default || true
+
+      - name: Debug list out\/default
+
+        shell: bash
+
+        run: |
+
+          echo "Contenido de out/default:";
+
+          ls -lR out/default || true
+
+      - name: Debug list out\/default
+
+        shell: bash
+
+        run: |
+
+          echo "Contenido de out/default:";
+
+          ls -lR out/default || true
+
+      - name: Debug list out/default
+
+        shell: bash
+
+        run: |
+
+          echo "Contenido de out/default antes del tar:"
+
+          ls -lR out/default || true
       - name: Package crashes
         id: pkg
         shell: bash
         run: |
           if compgen -G 'out/default/crashes/id:*' > /dev/null; then
-            tar -C out/default -czf crashes-png_parser.tar.gz crashes
+            tar -czf crashes-png_parser.tar.gz -C out/default crashes
             echo "has_crash=true" >> $GITHUB_OUTPUT
+            echo "has_crash=true"
           else
             echo "has_crash=false" >> $GITHUB_OUTPUT
+            echo "has_crash=false"
           fi
 
       - name: Upload crashes
