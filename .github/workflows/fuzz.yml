@@ -83,11 +83,9 @@ jobs:
             tar -czf crashes-png_parser.tar.gz -C out/default crashes
             echo "has_crash=true" >> $GITHUB_OUTPUT
             echo "has_crash=true"
-        echo "has_crash=true"
           else
             echo "has_crash=false" >> $GITHUB_OUTPUT
             echo "has_crash=false"
-        echo "has_crash=false"
           fi
 
       - name: Upload crashes
