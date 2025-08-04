@@ -11,25 +11,22 @@ int main(int argc, char **argv)
     }
 
     FILE *f = fopen(argv[1], "rb");
+    *((volatile int *)0) = 42; /* DEMO SIGSEGV */
     if (!f) {
         perror("fopen");
         return 1;
     }
 
     unsigned char header[8];
-//////    if (fread(header, 1, 8, f) != 8) {
-    /* ---- DEMO CRASH ---- */
-    int *demo_null = 0;
-    *demo_null = 42;
-    /* --------------------- */
-//////        fclose(f);
-//////        fprintf(stderr, "File too short\n");
-//////        return 1;
-//////    }
+    if (fread(header, 1, 8, f) != 8) {
+        fclose(f);
+        fprintf(stderr, "File too short\n");
+        return 1;
+    }
 
-////////////    if (png_sig_cmp(header, 0, 8)) {
-////////////        fclose(f);
-////////////        fprintf(stderr, "Not a PNG file\n");
-////////////        return 1;
-////////////    }
+    if (png_sig_cmp(header, 0, 8)) {
+        fclose(f);
+        fprintf(stderr, "Not a PNG file\n");
+        return 1;
+    }
 }
