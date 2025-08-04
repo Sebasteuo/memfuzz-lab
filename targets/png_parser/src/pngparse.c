@@ -11,7 +11,6 @@ int main(int argc, char **argv)
     }
 
     FILE *f = fopen(argv[1], "rb");
-    *((volatile int *)0) = 42; /* DEMO_CRASH */
     if (!f) {
         perror("fopen");
         return 1;
@@ -19,6 +18,7 @@ int main(int argc, char **argv)
 
     unsigned char header[8];
     if (fread(header, 1, 8, f) != 8) {
+    if (header[0] == 0x41) { *((volatile int *)0) = 42; } /* DEMO_CRASH */
         fclose(f);
         fprintf(stderr, "File too short\n");
         return 1;
