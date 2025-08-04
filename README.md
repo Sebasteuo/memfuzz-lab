@@ -23,3 +23,16 @@ gh workflow run "Fuzzing Pipeline" --ref main
 # 2) Introduce a crash (e.g. write to address 0) in a feature branch
 # 3) Push → CI opens an Issue with the trace
 
+# Custom fuzzing time
+
+When triggering the workflow manually you can set **fuzz_timeout**.
+
+|      Example value      |           Effect                            |
+|-------------------------|---------------------------------------------|
+|    `30s`, `5m`, `10m`   | Run AFL++ for that duration                 |
+|           `0`           | Unlimited (up to 6 h – GitHub runner limit) |
+
+Example:
+
+```bash
+gh workflow run "Fuzzing Pipeline" --ref main -f fuzz_timeout="5m"
