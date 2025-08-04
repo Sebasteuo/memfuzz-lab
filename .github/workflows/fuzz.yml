@@ -63,12 +63,21 @@ jobs:
 
           ls -lR out/default || true
 
+      - name: Debug list out/default
+
+        shell: bash
+
+        run: |
+
+          echo "Contenido de out/default antes del tar:"
+
+          ls -lR out/default || true
       - name: Package crashes
         id: pkg
         shell: bash
         run: |
           if compgen -G 'out/default/crashes/id:*' > /dev/null; then
-            tar -C out/default -czf crashes-png_parser.tar.gz crashes
+            tar -czf crashes-png_parser.tar.gz -C out/default crashes
             echo "has_crash=true" >> $GITHUB_OUTPUT
           else
             echo "has_crash=false" >> $GITHUB_OUTPUT
