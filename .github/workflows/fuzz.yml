@@ -35,14 +35,14 @@ jobs:
             -i ./targets/png_parser/corpus \
             -o out -- ./targets/png_parser/build/pngparse @@ || true
 
-      # empaqueta sólo si hay crashes
+      # Package only if crashes are present
       - name: Debug list out\/default
 
         shell: bash
 
         run: |
 
-          echo "Contenido de out/default antes del tar:";
+          echo "Contents of out/default before creating the tar archive:";
 
           ls -lR out/default || true
 
@@ -52,7 +52,7 @@ jobs:
 
         run: |
 
-          echo "Contenido de out/default:";
+          echo "Contents of out/default:";
 
           ls -lR out/default || true
 
@@ -62,7 +62,7 @@ jobs:
 
         run: |
 
-          echo "Contenido de out/default:";
+          echo "Contents of out/default:";
 
           ls -lR out/default || true
 
@@ -72,7 +72,7 @@ jobs:
 
         run: |
 
-          echo "Contenido de out/default antes del tar:"
+          echo "Contents of out/default before creating the tar archive:"
 
           ls -lR out/default || true
       - name: Package crashes
@@ -135,4 +135,3 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./scripts/symbolize_and_issue.sh
-      # **** BLOQUE FIJO (de momento sólo eco) ****
