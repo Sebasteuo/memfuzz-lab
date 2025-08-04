@@ -4,6 +4,9 @@ on:
 
 jobs:
   fuzz:
+    outputs:
+
+      has_crash: ${{ steps.pkg.outputs.has_crash }}
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/sebasteuo/memfuzz-lab:latest
@@ -49,6 +52,7 @@ jobs:
           path: crashes-png_parser.tar.gz
 
   analyze:
+    if: needs.fuzz.outputs.has_crash == 'true'
     needs: fuzz
     runs-on: ubuntu-latest
     container:
