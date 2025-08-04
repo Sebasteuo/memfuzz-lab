@@ -1,11 +1,11 @@
 name: Fuzzing Pipeline
 on:
   workflow_dispatch:
-  inputs:
-      fuzz_timeout:
-        description: "Max fuzzing time (30s, 5m, 0 = unlimited)"
-        default: "30s"
-        required: false
+    inputs:
+        fuzz_timeout:
+          description: "Max fuzzing time (30s, 5m, 0 = unlimited)"
+          default: "30s"
+          required: false
   push:
     branches: [ main ]
 jobs:
