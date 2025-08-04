@@ -33,6 +33,16 @@ jobs:
             -o out -- ./targets/png_parser/build/pngparse @@ || true
 
       # empaqueta sólo si hay crashes
+      - name: Debug list out\/default
+
+        shell: bash
+
+        run: |
+
+          echo "Contenido de out/default antes del tar:";
+
+          ls -lR out/default || true
+
       - name: Package crashes
         id: pkg
         shell: bash
