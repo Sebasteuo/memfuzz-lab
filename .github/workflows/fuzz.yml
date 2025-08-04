@@ -54,13 +54,11 @@ jobs:
           path: .
 
       - name: Rebuild png_parser (symbols)
+        run: bash ./targets/png_parser/build.sh
+
       - name: Symbolize & create Issue
-
         shell: bash
-
         env:
-
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
         run: ./scripts/symbolize_and_issue.sh
       # **** BLOQUE FIJO (de momento sólo eco) ****
