@@ -10,12 +10,12 @@ The CI pipeline builds instrumented targets, explores millions of paths, capture
 3. Packages crashes as CI artefacts.
 4. Symbolises the stack‑trace and automatically opens a GitHub Issue.
 
-## How it works
+# How it works
 * `fuzz.yml` – GitHub Actions workflow.
 * `scripts/symbolize_and_issue.sh` – converts ASan traces into Issues.
 * `targets/png_parser` – tiny demo target.
 
-## Try it yourself
+Try it yourself
 ```bash
 # 1) Trigger manually
 gh workflow run "Fuzzing Pipeline" --ref main
