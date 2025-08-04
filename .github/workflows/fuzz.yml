@@ -82,8 +82,10 @@ jobs:
           if compgen -G 'out/default/crashes/id:*' > /dev/null; then
             tar -czf crashes-png_parser.tar.gz -C out/default crashes
             echo "has_crash=true" >> $GITHUB_OUTPUT
+        echo "has_crash=true"
           else
             echo "has_crash=false" >> $GITHUB_OUTPUT
+        echo "has_crash=false"
           fi
 
       - name: Upload crashes
