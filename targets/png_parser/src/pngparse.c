@@ -23,9 +23,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (png_sig_cmp(header, 0, 8)) {
-        fclose(f);
-        fprintf(stderr, "Not a PNG file\n");
-        return 1;
-    }
+////    if (png_sig_cmp(header, 0, 8)) {
+////        fclose(f);
+////        fprintf(stderr, "Not a PNG file\n");
+////        return 1;
+////    }
 }
