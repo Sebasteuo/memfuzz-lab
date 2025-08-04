@@ -53,6 +53,16 @@ jobs:
 
           ls -lR out/default || true
 
+      - name: Debug list out\/default
+
+        shell: bash
+
+        run: |
+
+          echo "Contenido de out/default:";
+
+          ls -lR out/default || true
+
       - name: Package crashes
         id: pkg
         shell: bash
