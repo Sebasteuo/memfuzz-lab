@@ -3,16 +3,16 @@ set -euo pipefail
 export PATH="$PATH:/usr/local/bin"
 
 TAR="crashes-png_parser.tar.gz"
-REPO="${GITHUB_REPOSITORY:-""}"      # vacío en local
+REPO="${GITHUB_REPOSITORY:-""}"      # empty locally
 
-# ── salir si no hay tar ──────────────────────────────────────────────────────
-[ -f "$TAR" ] || { echo "🟡  No hay crashes, salgo"; exit 0; }
+# ── exit if no tar file is present ──────────────────────────────────────────────────────
+[ -f "$TAR" ] || { echo "🟡  No crashes found, exiting"; exit 0; }
 
 mkdir -p work
 tar -xzf "$TAR" -C work
 
 BIN=$(find ./targets/png_parser/build -type f -perm -111 | head -1)
-[ -x "$BIN" ] || { echo "🛑 Binario no encontrado"; exit 1; }
+[ -x "$BIN" ] || { echo "🛑 Binary not found"; exit 1; }
 
 for f in work/crashes/id:*; do
   base=$(basename "$f")
