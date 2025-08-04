@@ -1,7 +1,13 @@
 name: Fuzzing Pipeline
 on:
   workflow_dispatch:
-
+  inputs:
+      fuzz_timeout:
+        description: "Max fuzzing time (30s, 5m, 0 = unlimited)"
+        default: "30s"
+        required: false
+  push:
+    branches: [ main ]
 jobs:
   fuzz:
     outputs:
@@ -25,15 +31,18 @@ jobs:
       - name: Build png_parser
         run: bash ./targets/png_parser/build.sh
 
-      - name: Run AFL++ (30 s)
+      - name: Run AFL++
+        shell: bash
         env:
-
-          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+          TIMEOUT: ${{ github.event.inputs.fuzz_timeout || '30s' }}
         run: |
-          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 timeout 30s afl-fuzz \
-            -i ./targets/png_parser/corpus \
-            -o out -- ./targets/png_parser/build/pngparse @@ || true
+          if [ "$TIMEOUT" = "0" ]; then
+            echo "Running fuzzing with NO timeout (CI limit 6 h)…"
+            afl-fuzz -i targets/png_parser/corpus -o out/default -- ./targets/png_parser/build/pngparse @@
+          else
+            echo "Running fuzzing for $TIMEOUT …"
+            timeout "$TIMEOUT" afl-fuzz -i targets/png_parser/corpus -o out/default -- ./targets/png_parser/build/pngparse @@
+          fi
 
       # empaqueta sólo si hay crashes
       - name: Debug list out\/default
