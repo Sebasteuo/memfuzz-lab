@@ -1,2 +1,10 @@
 !targets/
 !targets/**
+
+# Fuzz artefacts
+out/
+crashes*
+local_out/
+*.tar.gz
+*.zip
+
