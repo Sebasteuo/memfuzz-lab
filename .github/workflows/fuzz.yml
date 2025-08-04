@@ -35,6 +35,7 @@ jobs:
         shell: bash
         env:
           TIMEOUT: ${{ github.event.inputs.fuzz_timeout || '30s' }}
+          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: 1
         run: |
           if [ "$TIMEOUT" = "0" ]; then
             echo "Running fuzzing with NO timeout (CI limit 6 h)…"
