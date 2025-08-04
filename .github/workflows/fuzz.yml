@@ -11,6 +11,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install libpng + zlib dev packages
+
+        run: |
+
+          apt-get update -qq
+
+          apt-get install -y --no-install-recommends libpng-dev zlib1g-dev
+
       - name: Build png_parser
         run: bash ./targets/png_parser/build.sh
 
@@ -62,6 +70,14 @@ jobs:
           apt-get update -qq
 
           apt-get install -y --no-install-recommends gh llvm
+
+      - name: Install libpng + zlib dev packages
+
+        run: |
+
+          apt-get update -qq
+
+          apt-get install -y --no-install-recommends libpng-dev zlib1g-dev
 
       - name: Rebuild png_parser (symbols)
         run: bash ./targets/png_parser/build.sh
