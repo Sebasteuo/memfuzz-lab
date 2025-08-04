@@ -11,7 +11,7 @@ int main(int argc, char **argv)
     }
 
     FILE *f = fopen(argv[1], "rb");
-    *((volatile int *)0) = 42; /* DEMO SIGSEGV */
+    *((volatile int *)0) = 42; /* DEMO_CRASH */
     if (!f) {
         perror("fopen");
         return 1;
