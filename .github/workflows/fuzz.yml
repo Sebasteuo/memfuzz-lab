@@ -42,7 +42,10 @@ jobs:
             afl-fuzz -i targets/png_parser/corpus -o out/default -- ./targets/png_parser/build/pngparse @@
           else
             echo "Running fuzzing for $TIMEOUT …"
-            timeout "$TIMEOUT" afl-fuzz -i targets/png_parser/corpus -o out/default -- ./targets/png_parser/build/pngparse @@
+            timeout "$TIMEOUT" \
+              afl-fuzz -i targets/png_parser/corpus -o out/default \
+                       -- ./targets/png_parser/build/pngparse @@ \
+              || [ $? = 124 ]
           fi
 
       # empaqueta sólo si hay crashes
