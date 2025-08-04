@@ -17,15 +17,15 @@ int main(int argc, char **argv)
     }
 
     unsigned char header[8];
-    if (fread(header, 1, 8, f) != 8) {
-        fclose(f);
-        fprintf(stderr, "File too short\n");
-        return 1;
-    }
+//    if (fread(header, 1, 8, f) != 8) {
+//        fclose(f);
+//        fprintf(stderr, "File too short\n");
+//        return 1;
+//    }
 
-//////    if (png_sig_cmp(header, 0, 8)) {
-//////        fclose(f);
-//////        fprintf(stderr, "Not a PNG file\n");
-//////        return 1;
-//////    }
+////////    if (png_sig_cmp(header, 0, 8)) {
+////////        fclose(f);
+////////        fprintf(stderr, "Not a PNG file\n");
+////////        return 1;
+////////    }
 }
