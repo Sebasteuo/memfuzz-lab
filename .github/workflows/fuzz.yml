@@ -1,137 +1,103 @@
 name: Fuzzing Pipeline
+
 on:
   workflow_dispatch:
+    inputs:
+      fuzz_timeout:
+        description: "Max fuzzing time (e.g. 30s, 5m, 0 = unlimited)"
+        default: "30s"
+        required: false
+  push:
+    branches: [ main ]
 
 jobs:
   fuzz:
-    outputs:
-
-      has_crash: ${{ steps.pkg.outputs.has_crash }}
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/sebasteuo/memfuzz-lab:latest
-      options: --user 0
+    env:
+      # carpeta de salida para AFL++
+      OUT_DIR: out/default
+
     steps:
-      - uses: actions/checkout@v4
+    # ───────────────────────────── checkout ──────────────────────────────
+    - name: Checkout repo
+      uses: actions/checkout@v4
 
-      - name: Install libpng + zlib dev packages
+    # ───────────────────────────── build target ──────────────────────────
+    - name: Build png_parser (ASan)
+      shell: bash
+      run: |
+        export CC=afl-clang-fast
+        export CXX=afl-clang-fast++
+        CFLAGS="-g -O2 -fsanitize=address -fno-omit-frame-pointer"
+        mkdir -p targets/png_parser/build
+        ${CC} ${CFLAGS} targets/png_parser/src/pngparse.c -o targets/png_parser/build/pngparse -lpng -lz
 
-        run: |
+    # ─────────────────────────── run AFL++ ───────────────────────────────
+    - name: Run AFL++
+      shell: bash
+      env:
+        TIMEOUT: ${{ github.event.inputs.fuzz_timeout || '30s' }}
+        AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: 1
+      run: |
+        mkdir -p ${OUT_DIR}
+        if [ "$TIMEOUT" = "0" ]; then
+          echo "Running fuzzing with NO timeout (CI limit 6 h)…"
+          afl-fuzz -i targets/png_parser/corpus -o ${OUT_DIR} \
+                   -- targets/png_parser/build/pngparse @@
+        else
+          echo "Running fuzzing for $TIMEOUT …"
+          timeout "$TIMEOUT" \
+            afl-fuzz -i targets/png_parser/corpus -o ${OUT_DIR} \
+                     -- targets/png_parser/build/pngparse @@ \
+            || [ $? = 124 ]
+        fi
 
-          apt-get update -qq
+    # ─────────────── package crashes + expose has_crash output ───────────
+    - name: Package crashes
+      id: pkg
+      shell: bash
+      run: |
+        echo "📦 Packaging crashes (if any)…"
+        if compgen -G '${OUT_DIR}/crashes/id:*' > /dev/null; then
+          tar -czf crashes-png_parser.tar.gz -C ${OUT_DIR} crashes
+          echo "has_crash=true" >> "$GITHUB_OUTPUT"
+          echo "has_crash=true"
+        else
+          echo "has_crash=false" >> "$GITHUB_OUTPUT"
+          echo "has_crash=false"
+        fi
 
-          apt-get install -y --no-install-recommends libpng-dev zlib1g-dev
+    # ─────────────────────── upload artefact (optional) ──────────────────
+    - name: Upload crashes artefact
+      if: steps.pkg.outputs.has_crash == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: crashes-png_parser
+        path: crashes-png_parser.tar.gz
 
-      - name: Build png_parser
-        run: bash ./targets/png_parser/build.sh
+    # ─────────── symbolize trace + open Issue only when crash ────────────
+    - name: Symbolize & create Issue
+      if: steps.pkg.outputs.has_crash == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # descomprime input y ejecuta el binario para capturar la traza
+        tar -xzf crashes-png_parser.tar.gz -C .
+        BIN=targets/png_parser/build/pngparse
+        for f in crashes/id:*; do
+          out=$(mktemp)
+          ASAN_SYMBOLIZER_PATH=$(which llvm-symbolizer) \
+          ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
+          "$BIN" "$f" 2>&1 | tee "$out" >/dev/null || true
 
-      - name: Run AFL++ (30 s)
-        env:
+          title="$(grep -m1 -v '^$' "$out" | cut -c1-120)"
+          [ -z "$title" ] && title="ASAN SEGV crash"
+          title="Crash: $title [$(date +%F-%H%M)]"
 
-          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
-        run: |
-          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 timeout 30s afl-fuzz \
-            -i ./targets/png_parser/corpus \
-            -o out -- ./targets/png_parser/build/pngparse @@ || true
-
-      # Package only if crashes are present
-      - name: Debug list out\/default
-
-        shell: bash
-
-        run: |
-
-          echo "Contents of out/default before creating the tar archive:";
-
-          ls -lR out/default || true
-
-      - name: Debug list out\/default
-
-        shell: bash
-
-        run: |
-
-          echo "Contents of out/default:";
-
-          ls -lR out/default || true
-
-      - name: Debug list out\/default
-
-        shell: bash
-
-        run: |
-
-          echo "Contents of out/default:";
-
-          ls -lR out/default || true
-
-      - name: Debug list out/default
-
-        shell: bash
-
-        run: |
-
-          echo "Contents of out/default before creating the tar archive:"
-
-          ls -lR out/default || true
-      - name: Package crashes
-        id: pkg
-        shell: bash
-        run: |
-          if compgen -G 'out/default/crashes/id:*' > /dev/null; then
-            tar -czf crashes-png_parser.tar.gz -C out/default crashes
-            echo "has_crash=true" >> $GITHUB_OUTPUT
-            echo "has_crash=true"
-          else
-            echo "has_crash=false" >> $GITHUB_OUTPUT
-            echo "has_crash=false"
-          fi
-
-      - name: Upload crashes
-        if: steps.pkg.outputs.has_crash == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: crashes-png_parser
-          path: crashes-png_parser.tar.gz
-
-  analyze:
-    if: needs.fuzz.outputs.has_crash == 'true'
-    needs: fuzz
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/sebasteuo/memfuzz-lab:latest
-      options: --user 0
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: crashes-png_parser
-          path: .
-
-      - name: Install gh CLI + llvm-symbolizer
-
-        shell: bash
-
-        run: |
-
-          apt-get update -qq
-
-          apt-get install -y --no-install-recommends gh llvm
-
-      - name: Install libpng + zlib dev packages
-
-        run: |
-
-          apt-get update -qq
-
-          apt-get install -y --no-install-recommends libpng-dev zlib1g-dev
-
-      - name: Rebuild png_parser (symbols)
-        run: bash ./targets/png_parser/build.sh
-
-      - name: Symbolize & create Issue
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./scripts/symbolize_and_issue.sh
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$title" \
+            --label auto-crash \
+            --body "$(printf '### 💥 Fuzzing crash detected\n\n**Input**: `%s`\n\n```\n%s\n```' "$(basename "$f")" "$(cat "$out")")"
+        done
