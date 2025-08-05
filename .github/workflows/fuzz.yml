@@ -16,7 +16,7 @@ jobs:
 
     strategy:
       matrix:
-        target: [png_parser, xxd]
+        target: [png_parser, xxd, tinyxml2_700]
 
     env:
       OUT_DIR: out/default
@@ -30,7 +30,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y afl++ libpng-dev
 
-    # ─────────── compilar según el target ───────────
+    # ───────────────────────── build ─────────────────────────
     - name: Build target (ASan)
       shell: bash
       run: |
@@ -38,17 +38,23 @@ jobs:
         export CXX=afl-clang-fast++
         CFLAGS="-g -O2 -fsanitize=address -fno-omit-frame-pointer"
 
-        if [ "${{ matrix.target }}" = "png_parser" ]; then
-          mkdir -p targets/png_parser/build
-          ${CC} ${CFLAGS} targets/png_parser/src/pngparse.c \
-                -o targets/png_parser/build/pngparse -lpng -lz
-        else
-          mkdir -p targets/xxd/build
-          ${CC} ${CFLAGS} targets/xxd/src/xxd.c \
-                -o targets/xxd/build/xxd
-        fi
+        case "${{ matrix.target }}" in
+          png_parser)
+            mkdir -p targets/png_parser/build
+            ${CC} ${CFLAGS} targets/png_parser/src/pngparse.c \
+                  -o targets/png_parser/build/pngparse -lpng -lz
+            ;;
+          xxd)
+            mkdir -p targets/xxd/build
+            ${CC} ${CFLAGS} targets/xxd/src/xxd.c \
+                  -o targets/xxd/build/xxd
+            ;;
+          tinyxml2_700)
+            targets/tinyxml2_700/build.sh
+            ;;
+        esac
 
-    # ─────────── ejecutar AFL++ ───────────
+    # ──────────────────────── fuzz ───────────────────────────
     - name: Run AFL++
       shell: bash
       env:
@@ -58,30 +64,33 @@ jobs:
         TARGET="${{ matrix.target }}"
         mkdir -p ${OUT_DIR}
 
-        if [ "$TARGET" = "png_parser" ]; then
-          BIN=targets/png_parser/build/pngparse
-          CORP=targets/png_parser/corpus
-        else
-          BIN=targets/xxd/build/xxd
-          CORP=targets/xxd/corpus
-        fi
+        case "$TARGET" in
+          png_parser)
+            BIN=targets/png_parser/build/pngparse
+            CORP=targets/png_parser/corpus
+            ;;
+          xxd)
+            BIN=targets/xxd/build/xxd
+            CORP=targets/xxd/corpus
+            ;;
+          tinyxml2_700)
+            BIN=targets/tinyxml2_700/build/xmltest
+            CORP=targets/tinyxml2_700/corpus
+            ;;
+        esac
 
         if [ "$TIMEOUT" = "0" ]; then
-          echo "Running fuzzing with NO timeout (CI limit 6h)…"
           afl-fuzz -i "$CORP" -o ${OUT_DIR} -- "$BIN" @@
         else
-          echo "Running fuzzing for $TIMEOUT …"
-          timeout "$TIMEOUT" \
-            afl-fuzz -i "$CORP" -o ${OUT_DIR} -- "$BIN" @@ \
+          timeout "$TIMEOUT" afl-fuzz -i "$CORP" -o ${OUT_DIR} -- "$BIN" @@ \
             || [ $? = 124 ]
         fi
 
-    # ─────────── empaquetar crashes ───────────
+    # ───────────── package ─────────────
     - name: Package crashes
       id: pkg
       shell: bash
       run: |
-        echo "📦 Packaging crashes (if any)…"
         if compgen -G '${OUT_DIR}/crashes/id:*' > /dev/null; then
           tar -czf crashes-${{ matrix.target }}.tar.gz -C ${OUT_DIR} crashes
           echo "has_crash=true" >> "$GITHUB_OUTPUT"
@@ -89,14 +98,14 @@ jobs:
           echo "has_crash=false" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: Upload crashes artefact
+    - name: Upload artefact
       if: steps.pkg.outputs.has_crash == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: crashes-${{ matrix.target }}
         path: crashes-${{ matrix.target }}.tar.gz
 
-    # ─────────── simbolizar y crear Issue ───────────
+    # ─────────── symbolize & Issue ───────────
     - name: Symbolize & create Issue
       if: steps.pkg.outputs.has_crash == 'true'
       shell: bash
@@ -104,11 +113,11 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         tar -xzf crashes-${{ matrix.target }}.tar.gz -C .
-        if [ "${{ matrix.target }}" = "png_parser" ]; then
-          BIN=targets/png_parser/build/pngparse
-        else
-          BIN=targets/xxd/build/xxd
-        fi
+        case "${{ matrix.target }}" in
+          png_parser)    BIN=targets/png_parser/build/pngparse ;;
+          xxd)           BIN=targets/xxd/build/xxd ;;
+          tinyxml2_700)  BIN=targets/tinyxml2_700/build/xmltest ;;
+        esac
 
         for f in crashes/id:*; do
           out=$(mktemp)
@@ -117,7 +126,7 @@ jobs:
           "$BIN" "$f" 2>&1 | tee "$out" >/dev/null || true
 
           title=$(grep -m1 -v '^$' "$out" | cut -c1-120)
-          [ -z "$title" ] && title="ASAN crash"
+          [ -z "$title" ] && title="ASan crash"
           title="Crash: ${title} [${{ matrix.target }}]"
 
           gh issue create \
