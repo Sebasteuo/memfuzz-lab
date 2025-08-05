@@ -34,6 +34,7 @@ jobs:
     - name: Build target (ASan)
       shell: bash
       run: |
+        # Compilador con AFL++
         export CC=afl-clang-fast
         export CXX=afl-clang-fast++
         CFLAGS="-g -O2 -fsanitize=address -fno-omit-frame-pointer"
@@ -44,16 +45,18 @@ jobs:
             ${CC} ${CFLAGS} targets/png_parser/src/pngparse.c \
                   -o targets/png_parser/build/pngparse -lpng -lz
             ;;
+
           xxd)
             mkdir -p targets/xxd/build
             ${CC} ${CFLAGS} targets/xxd/src/xxd.c \
                   -o targets/xxd/build/xxd
             ;;
+
           tinyxml2_700)
+            # Script que compila tinyxml2 7.0.0 y deja el binario en build/
             targets/tinyxml2_700/build.sh
             ;;
         esac
-
     # ──────────────────────── fuzz ───────────────────────────
     - name: Run AFL++
       shell: bash
@@ -80,12 +83,14 @@ jobs:
         esac
 
         if [ "$TIMEOUT" = "0" ]; then
+          echo "Running fuzzing with NO timeout (CI limit 6 h)…"
           afl-fuzz -i "$CORP" -o ${OUT_DIR} -- "$BIN" @@
         else
-          timeout "$TIMEOUT" afl-fuzz -i "$CORP" -o ${OUT_DIR} -- "$BIN" @@ \
+          echo "Running fuzzing for $TIMEOUT …"
+          timeout "$TIMEOUT" \
+            afl-fuzz -i "$CORP" -o ${OUT_DIR} -- "$BIN" @@ \
             || [ $? = 124 ]
         fi
-
     # ───────────── package ─────────────
     - name: Package crashes
       id: pkg
