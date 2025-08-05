@@ -21,7 +21,11 @@ jobs:
     # ───────────────────────────── checkout ──────────────────────────────
     - name: Checkout repo
       uses: actions/checkout@v4
-
+   
+    - name: Install AFL++ and libpng
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y afl++ libpng-dev
     # ───────────────────────────── build target ──────────────────────────
     - name: Build png_parser (ASan)
       shell: bash
