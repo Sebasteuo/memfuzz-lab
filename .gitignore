@@ -8,3 +8,10 @@ local_out/
 *.tar.gz
 *.zip
 
+
+# ✨ Fuzzing artefacts
+out/
+local_out/
+crashes*
+*.tar.gz
+*.zip
