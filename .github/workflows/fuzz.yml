@@ -22,19 +22,15 @@ jobs:
       OUT_DIR: out/default
 
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
     - name: Install AFL++ and libpng
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y afl++ libpng-dev
+      run: sudo apt-get update && sudo apt-get install -y afl++ libpng-dev
 
-    # ───────────────────────── build ─────────────────────────
+    # ───── build ─────
     - name: Build target (ASan)
       shell: bash
       run: |
-        # Compilador con AFL++
         export CC=afl-clang-fast
         export CXX=afl-clang-fast++
         CFLAGS="-g -O2 -fsanitize=address -fno-omit-frame-pointer"
@@ -43,21 +39,16 @@ jobs:
           png_parser)
             mkdir -p targets/png_parser/build
             ${CC} ${CFLAGS} targets/png_parser/src/pngparse.c \
-                  -o targets/png_parser/build/pngparse -lpng -lz
-            ;;
-
+                  -o targets/png_parser/build/pngparse -lpng -lz ;;
           xxd)
             mkdir -p targets/xxd/build
             ${CC} ${CFLAGS} targets/xxd/src/xxd.c \
-                  -o targets/xxd/build/xxd
-            ;;
-
+                  -o targets/xxd/build/xxd ;;
           tinyxml2_700)
-            # Script que compila tinyxml2 7.0.0 y deja el binario en build/
-            targets/tinyxml2_700/build.sh
-            ;;
+            targets/tinyxml2_700/build.sh ;;
         esac
-    # ──────────────────────── fuzz ───────────────────────────
+
+    # ───── fuzz ─────
     - name: Run AFL++
       shell: bash
       env:
@@ -70,32 +61,29 @@ jobs:
         case "$TARGET" in
           png_parser)
             BIN=targets/png_parser/build/pngparse
-            CORP=targets/png_parser/corpus
-            ;;
+            CORP=targets/png_parser/corpus ;;
           xxd)
             BIN=targets/xxd/build/xxd
-            CORP=targets/xxd/corpus
-            ;;
+            CORP=targets/xxd/corpus ;;
           tinyxml2_700)
             BIN=targets/tinyxml2_700/build/xmltest
-            CORP=targets/tinyxml2_700/corpus
-            ;;
+            CORP=targets/tinyxml2_700/corpus ;;
         esac
 
         if [ "$TIMEOUT" = "0" ]; then
-          echo "Running fuzzing with NO timeout (CI limit 6 h)…"
           afl-fuzz -i "$CORP" -o ${OUT_DIR} -- "$BIN" @@
         else
-          echo "Running fuzzing for $TIMEOUT …"
           timeout "$TIMEOUT" \
             afl-fuzz -i "$CORP" -o ${OUT_DIR} -- "$BIN" @@ \
             || [ $? = 124 ]
         fi
-    # ───────────── package ─────────────
+
+    # ───── package ─────
     - name: Package crashes
       id: pkg
       shell: bash
       run: |
+        echo "📦 Packaging crashes (if any)…"
         if compgen -G '${OUT_DIR}/crashes/id:*' > /dev/null; then
           tar -czf crashes-${{ matrix.target }}.tar.gz -C ${OUT_DIR} crashes
           echo "has_crash=true" >> "$GITHUB_OUTPUT"
@@ -103,21 +91,21 @@ jobs:
           echo "has_crash=false" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: Upload artefact
+    - name: Upload crashes artefact
       if: steps.pkg.outputs.has_crash == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: crashes-${{ matrix.target }}
         path: crashes-${{ matrix.target }}.tar.gz
 
-    # ─────────── symbolize & Issue ───────────
+    # ───── symbolize & issue ─────
     - name: Symbolize & create Issue
       if: steps.pkg.outputs.has_crash == 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        tar -xzf crashes-${{ matrix.target }}.tar.gz -C .
+        tar -xzf crashes-${{ matrix.target }}.tar.gz
         case "${{ matrix.target }}" in
           png_parser)    BIN=targets/png_parser/build/pngparse ;;
           xxd)           BIN=targets/xxd/build/xxd ;;
@@ -130,12 +118,10 @@ jobs:
           ASAN_OPTIONS=symbolize=1:detect_leaks=0 \
           "$BIN" "$f" 2>&1 | tee "$out" >/dev/null || true
 
-          title=$(grep -m1 -v '^$' "$out" | cut -c1-120)
+          title="$(grep -m1 -v '^$' "$out" | cut -c1-120)"
           [ -z "$title" ] && title="ASan crash"
           title="Crash: ${title} [${{ matrix.target }}]"
 
-          gh issue create \
-            --title "$title" \
-            --label auto-crash \
+          gh issue create --title "$title" --label auto-crash \
             --body "$(printf '### 💥 Crash in **%s**\n\n**Input**: `%s`\n\n```text\n%s\n```' "${{ matrix.target }}" "$(basename "$f")" "$(cat "$out")")"
         done
