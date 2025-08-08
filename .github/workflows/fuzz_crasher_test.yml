@@ -1,0 +1,50 @@
+name: Fuzzing Crasher Test
+on:
+  workflow_dispatch:
+    inputs:
+      fuzz_timeout:
+        description: "Duración de afl-fuzz (ej. 2m, 120s)"
+        required: false
+        default: "2m"
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+      AFL_SKIP_CPUFREQ: "1"
+      CC: afl-clang-fast
+      CFLAGS: -g -O1 -fsanitize=address -fno-omit-frame-pointer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y afl++ clang lld build-essential
+
+      - name: Compilar crasher y preparar seeds
+        run: |
+          mkdir -p build seeds
+          $CC $CFLAGS targets/crasher/crasher.c -o build/crasher_asan
+          printf "CRASH!!!" > seeds/trigger
+
+      - name: Ejecutar AFL++ (acotado por timeout)
+        run: |
+          timeout "${{ inputs.fuzz_timeout }}" \
+            afl-fuzz -i seeds -o findings -m none -- ./build/crasher_asan @@ || true
+
+      - name: Listar resultados
+        run: |
+          echo "::group::findings"
+          ls -la findings/default || true
+          ls -la findings/default/crashes || true
+          echo "::endgroup::"
+
+      - name: Subir artefactos
+        uses: actions/upload-artifact@v4
+        with:
+          name: findings-${{ github.run_id }}
+          path: findings
+          if-no-files-found: warn
