@@ -49,8 +49,6 @@ jobs:
           $CC $CFLAGS targets/crasher/crasher.c -o build/crasher_asan
           printf "CRASH!!!" > seeds/trigger
           echo "run_id=${{ github.run_id }}" > findings/_meta.txt
-          echo "ref=${{ github.ref }}" >> findings/_meta.txt
-          echo "sha=${{ github.sha }}" >> findings/_meta.txt
 
       - name: Ejecutar AFL++ (acotado por timeout)
         run: |
@@ -74,20 +72,10 @@ jobs:
             echo "- Crashes: $COUNT"
             echo "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } >> "$GITHUB_STEP_SUMMARY"
-          # También guarda un resumen en el artifact
           {
             echo "Crashes: $COUNT"
             echo "Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } > findings/summary.txt
-
-      - name: Subir artefactos (findings)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: findings-${{ github.run_id }}-crasher
-          path: findings/**
-          if-no-files-found: error
-          retention-days: 7
 
       - name: Abrir Issue si hubo crashes
         if: steps.summary.outputs.crash_count != '0'
@@ -100,7 +88,7 @@ jobs:
               `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               `Crashes: ${crashCount}`,
               "",
-              "Files:",
+              "Lista de inputs que crashean:",
               "```",
               require('child_process').execSync("ls -1 findings/default/crashes/id:* || true").toString(),
               "```"
@@ -112,3 +100,19 @@ jobs:
               body
             });
             core.notice(`Issue creado: ${issue.html_url}`);
+
+      # ⬇️ Nuevo: empaquetar findings para evitar ':' en nombres del artifact
+      - name: Empaquetar findings (tar.gz)
+        if: always()
+        run: |
+          mkdir -p upload
+          tar -czf "upload/findings-${{ github.run_id }}-crasher.tar.gz" -C findings .
+
+      - name: Subir artifact empaquetado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: findings-${{ github.run_id }}-crasher
+          path: upload/findings-${{ github.run_id }}-crasher.tar.gz
+          if-no-files-found: error
+          retention-days: 7
