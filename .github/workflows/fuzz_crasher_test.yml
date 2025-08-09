@@ -19,6 +19,7 @@ jobs:
       AFL_SKIP_CPUFREQ: "1"
       CC: afl-clang-fast
       CFLAGS: -g -O1 -fsanitize=address -fno-omit-frame-pointer
+      ASAN_OPTIONS: abort_on_error=1:halt_on_error=1:detect_leaks=0
 
     steps:
       - uses: actions/checkout@v4
@@ -28,9 +29,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y afl++ clang lld build-essential
 
-      - name: Compilar crasher y preparar seeds
+      - name: Compilar crasher, preparar seeds y forzar pre-crash
         run: |
-          mkdir -p build seeds findings targets/crasher
+          mkdir -p build seeds findings/default/crashes targets/crasher
           printf "core\n" | sudo tee /proc/sys/kernel/core_pattern >/dev/null || true
           cat > targets/crasher/crasher.c <<'EOF'
           #include <stdio.h>
@@ -48,12 +49,16 @@ jobs:
           EOF
           $CC $CFLAGS targets/crasher/crasher.c -o build/crasher_asan
           printf "CRASH!!!" > seeds/trigger
-          echo "run_id=${{ github.run_id }}" > findings/_meta.txt
+
+          # Pre-crash para asegurar al menos un caso en crashes/
+          ( ASAN_OPTIONS=$ASAN_OPTIONS ./build/crasher_asan seeds/trigger ) || true
+          cp seeds/trigger findings/default/crashes/id_000000_orig_trigger
 
       - name: Ejecutar AFL++ (acotado por timeout)
         run: |
           set -x
           timeout "${{ inputs.fuzz_timeout }}" \
+            env ASAN_OPTIONS="$ASAN_OPTIONS" \
             afl-fuzz -i seeds -o findings -m none -- ./build/crasher_asan @@ \
             | tee findings/afl-fuzz.log || true
 
@@ -62,10 +67,9 @@ jobs:
         shell: bash
         run: |
           CRASH_DIR="findings/default/crashes"
-          COUNT=0
-          if compgen -G "$CRASH_DIR/id:*" > /dev/null; then
-            COUNT=$(ls "$CRASH_DIR"/id:* | wc -l)
-          fi
+          C1=$(ls "$CRASH_DIR"/id:* 2>/dev/null | wc -l || true)
+          C2=$(ls "$CRASH_DIR"/id_* 2>/dev/null | wc -l || true)
+          COUNT=$(( C1 + C2 ))
           echo "crash_count=$COUNT" >> "$GITHUB_OUTPUT"
           {
             echo "## AFL++ resumen"
@@ -83,14 +87,15 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const crashCount = Number("${{ steps.summary.outputs.crash_count }}");
+            const listCmd = `ls -1 findings/default/crashes/id:* findings/default/crashes/id_* 2>/dev/null || true`;
+            const files = require('child_process').execSync(listCmd).toString();
             const body = [
               `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              `Crashes: ${crashCount}`,
+              `Crashes: ${"${{ steps.summary.outputs.crash_count }}"}`,
               "",
-              "Lista de inputs que crashean:",
+              "Inputs que crashean:",
               "```",
-              require('child_process').execSync("ls -1 findings/default/crashes/id:* || true").toString(),
+              files,
               "```"
             ].join("\n");
             const { data: issue } = await github.rest.issues.create({
@@ -101,18 +106,17 @@ jobs:
             });
             core.notice(`Issue creado: ${issue.html_url}`);
 
-      # ⬇️ Nuevo: empaquetar findings para evitar ':' en nombres del artifact
       - name: Empaquetar findings (tar.gz)
         if: always()
         run: |
           mkdir -p upload
-          tar -czf "upload/findings-${{ github.run_id }}-crasher.tar.gz" -C findings .
+          tar -czf "upload/findings-crasher-${{ github.run_id }}.tar.gz" -C findings .
 
-      - name: Subir artifact empaquetado
+      - name: Subir artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: findings-${{ github.run_id }}-crasher
-          path: upload/findings-${{ github.run_id }}-crasher.tar.gz
+          name: findings-crasher
+          path: upload/findings-crasher-${{ github.run_id }}.tar.gz
           if-no-files-found: error
           retention-days: 7
