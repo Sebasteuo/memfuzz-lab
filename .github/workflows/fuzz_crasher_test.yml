@@ -1,0 +1,114 @@
+name: Fuzzing Crasher Test
+on:
+  workflow_dispatch:
+    inputs:
+      fuzz_timeout:
+        description: "Duración de afl-fuzz (ej. 2m, 120s)"
+        required: false
+        default: "2m"
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    env:
+      AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+      AFL_SKIP_CPUFREQ: "1"
+      CC: afl-clang-fast
+      CFLAGS: -g -O1 -fsanitize=address -fno-omit-frame-pointer
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y afl++ clang lld build-essential
+
+      - name: Compilar crasher y preparar seeds
+        run: |
+          mkdir -p build seeds findings targets/crasher
+          printf "core\n" | sudo tee /proc/sys/kernel/core_pattern >/dev/null || true
+          cat > targets/crasher/crasher.c <<'EOF'
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          int main(int argc,char**argv){
+            if(argc < 2) return 0;
+            FILE *f = fopen(argv[1],"rb"); if(!f) return 0;
+            char buf[8]={0}; fread(buf,1,sizeof(buf),f); fclose(f);
+            if (memcmp(buf,"CRASH!!!",8)==0){
+              volatile int *p = 0; *p = 42; // intentional crash
+            }
+            return 0;
+          }
+          EOF
+          $CC $CFLAGS targets/crasher/crasher.c -o build/crasher_asan
+          printf "CRASH!!!" > seeds/trigger
+          echo "run_id=${{ github.run_id }}" > findings/_meta.txt
+          echo "ref=${{ github.ref }}" >> findings/_meta.txt
+          echo "sha=${{ github.sha }}" >> findings/_meta.txt
+
+      - name: Ejecutar AFL++ (acotado por timeout)
+        run: |
+          set -x
+          timeout "${{ inputs.fuzz_timeout }}" \
+            afl-fuzz -i seeds -o findings -m none -- ./build/crasher_asan @@ \
+            | tee findings/afl-fuzz.log || true
+
+      - name: Resumen y conteo de crashes
+        id: summary
+        shell: bash
+        run: |
+          CRASH_DIR="findings/default/crashes"
+          COUNT=0
+          if compgen -G "$CRASH_DIR/id:*" > /dev/null; then
+            COUNT=$(ls "$CRASH_DIR"/id:* | wc -l)
+          fi
+          echo "crash_count=$COUNT" >> "$GITHUB_OUTPUT"
+          {
+            echo "## AFL++ resumen"
+            echo "- Crashes: $COUNT"
+            echo "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # También guarda un resumen en el artifact
+          {
+            echo "Crashes: $COUNT"
+            echo "Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } > findings/summary.txt
+
+      - name: Subir artefactos (findings)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: findings-${{ github.run_id }}-crasher
+          path: findings/**
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Abrir Issue si hubo crashes
+        if: steps.summary.outputs.crash_count != '0'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const crashCount = Number("${{ steps.summary.outputs.crash_count }}");
+            const body = [
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              `Crashes: ${crashCount}`,
+              "",
+              "Files:",
+              "```",
+              require('child_process').execSync("ls -1 findings/default/crashes/id:* || true").toString(),
+              "```"
+            ].join("\n");
+            const { data: issue } = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `AFL++ crash (crasher) – run #${context.runNumber}`,
+              body
+            });
+            core.notice(`Issue creado: ${issue.html_url}`);
