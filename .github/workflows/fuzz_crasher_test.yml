@@ -48,7 +48,7 @@ jobs:
           EOF
           $CC $CFLAGS targets/crasher/crasher.c -o build/crasher_asan
           printf "CRASH!!!" > seeds/trigger
-          # Fuerza un crash y deja un archivo sin ':' para no romper upload-artifact
+          # Pre-crash para asegurar al menos un caso en crashes/ (sin ':')
           ( ASAN_OPTIONS="$ASAN_OPTIONS" ./build/crasher_asan seeds/trigger || true )
           cp seeds/trigger findings/default/crashes/id_000000_orig_trigger
 
