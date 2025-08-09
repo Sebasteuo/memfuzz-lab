@@ -1,0 +1,90 @@
+name: Fuzzing Report (post-pipeline)
+
+on:
+  workflow_run:
+    workflows: ["Fuzzing Pipeline"]
+    types: [completed]
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [png_parser, xxd]
+
+    steps:
+      - name: Descargar artifact de crashes del target
+        uses: actions/download-artifact@v4
+        with:
+          # El run terminado que disparó este workflow:
+          run-id: ${{ github.event.workflow_run.id }}
+          name: crashes-${{ matrix.target }}
+          path: dl/${{ matrix.target }}
+          if-no-files-found: ignore
+
+      - name: Descomprimir (si existe) y contar crashes
+        id: count
+        run: |
+          set -e
+          T="${{ matrix.target }}"
+          AR=$(find "dl/$T" -name '*.tar.gz' -type f | head -n1 || true)
+          mkdir -p out/"$T"
+          COUNT=0
+          if [ -n "$AR" ]; then
+            tar -xzf "$AR" -C out/"$T"
+            C1=$(ls out/"$T"/default/crashes/id:* 2>/dev/null | wc -l || true)
+            C2=$(ls out/"$T"/default/crashes/id_* 2>/dev/null | wc -l || true)
+            COUNT=$(( C1 + C2 ))
+          fi
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          {
+            echo "Target: $T"
+            echo "Crashes: $COUNT"
+            echo "From run: ${{ github.event.workflow_run.html_url }}"
+          } | tee out/"$T"/report.txt
+
+      - name: Abrir Issue si hay crashes
+        if: steps.count.outputs.count != '0'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const T = process.env.TARGET = "${{ matrix.target }}";
+            let list = '';
+            try {
+              list = require('child_process')
+                .execSync(`ls -1 out/${T}/default/crashes/id:* out/${T}/default/crashes/id_* 2>/dev/null || true`)
+                .toString();
+            } catch (e) {}
+            const body = [
+              `Pipeline run: ${{ github.event.workflow_run.html_url }}`,
+              `Target: ${T}`,
+              `Crashes: ${{ steps.count.outputs.count }}`,
+              "",
+              "Inputs que crashean:",
+              "```",
+              list,
+              "```"
+            ].join("\n");
+            const res = await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title: `AFL++ crash – ${T} (post-pipeline) – run #${{ github.event.workflow_run.run_number }}`,
+              body
+            });
+            core.notice(`Issue: ${res.data.html_url}`);
+
+      - name: Subir reporte como artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.target }}-${{ github.event.workflow_run.id }}
+          path: out/${{ matrix.target }}/report.txt
+          if-no-files-found: warn
+          retention-days: 7
