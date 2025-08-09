@@ -11,11 +11,15 @@ jobs:
   fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
     env:
       AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
       AFL_SKIP_CPUFREQ: "1"
       CC: afl-clang-fast
       CFLAGS: -g -O1 -fsanitize=address -fno-omit-frame-pointer
+
     steps:
       - uses: actions/checkout@v4
 
@@ -26,25 +30,61 @@ jobs:
 
       - name: Compilar crasher y preparar seeds
         run: |
-          mkdir -p build seeds
+          mkdir -p build seeds targets/crasher
+          cat > targets/crasher/crasher.c <<'EOF'
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          int main(int argc,char**argv){
+            if(argc < 2) return 0;
+            FILE *f = fopen(argv[1],"rb"); if(!f) return 0;
+            char buf[8]={0}; fread(buf,1,sizeof(buf),f); fclose(f);
+            if (memcmp(buf,"CRASH!!!",8)==0){
+              volatile int *p = 0; *p = 42; // intentional crash
+            }
+            return 0;
+          }
+          EOF
           $CC $CFLAGS targets/crasher/crasher.c -o build/crasher_asan
           printf "CRASH!!!" > seeds/trigger
 
       - name: Ejecutar AFL++ (acotado por timeout)
         run: |
+          set -x
           timeout "${{ inputs.fuzz_timeout }}" \
             afl-fuzz -i seeds -o findings -m none -- ./build/crasher_asan @@ || true
 
-      - name: Listar resultados
+      - name: Resumen y conteo de crashes
+        id: summary
+        shell: bash
         run: |
-          echo "::group::findings"
-          ls -la findings/default || true
-          ls -la findings/default/crashes || true
-          echo "::endgroup::"
+          CRASH_DIR="findings/default/crashes"
+          COUNT=0
+          if compgen -G "$CRASH_DIR/id:*" > /dev/null; then
+            COUNT=$(ls "$CRASH_DIR"/id:* | wc -l)
+          fi
+          echo "crash_count=$COUNT" >> "$GITHUB_OUTPUT"
 
-      - name: Subir artefactos
+          echo "## AFL++ resumen" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Crashes: $COUNT" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Subir artefactos (findings)
         uses: actions/upload-artifact@v4
         with:
-          name: findings-${{ github.run_id }}
+          name: findings-${{ github.run_id }}-crasher
           path: findings
           if-no-files-found: warn
+          retention-days: 7
+
+      - name: Abrir Issue si hubo crashes
+        if: steps.summary.outputs.crash_count != '0'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CRASH_DIR="findings/default/crashes"
+          TITLE="AFL++ crash (crasher) – run #${{ github.run_number }}"
+          BODY="$(printf '%s\n\nCrashes:\n%s\n' \
+            "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            "$(ls -1 "$CRASH_DIR"/id:* 2>/dev/null || true)")"
+          gh issue create --title "$TITLE" --body "$BODY" || true
