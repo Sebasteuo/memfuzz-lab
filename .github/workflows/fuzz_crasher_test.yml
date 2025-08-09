@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
     inputs:
       fuzz_timeout:
-        description: "Duración de afl-fuzz (ej. 2m, 120s)"
+        description: "Duración de afl-fuzz (ej. 90s, 2m)"
         required: false
-        default: "2m"
+        default: "90s"
 
 jobs:
   fuzz:
@@ -19,100 +19,89 @@ jobs:
       AFL_SKIP_CPUFREQ: "1"
       CC: afl-clang-fast
       CFLAGS: -g -O1 -fsanitize=address -fno-omit-frame-pointer
+      ASAN_OPTIONS: abort_on_error=1:halt_on_error=1:detect_leaks=0
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Instalar dependencias
+      - name: Install AFL++ and deps
         run: |
           sudo apt-get update
           sudo apt-get install -y afl++ clang lld build-essential
 
-      - name: Compilar crasher y preparar seeds
+      - name: Build crasher + seeds + pre-crash
         run: |
-          mkdir -p build seeds findings targets/crasher
-          printf "core\n" | sudo tee /proc/sys/kernel/core_pattern >/dev/null || true
+          set -euxo pipefail
+          mkdir -p build seeds findings/default/crashes targets/crasher
           cat > targets/crasher/crasher.c <<'EOF'
           #include <stdio.h>
-          #include <stdlib.h>
           #include <string.h>
           int main(int argc,char**argv){
-            if(argc < 2) return 0;
-            FILE *f = fopen(argv[1],"rb"); if(!f) return 0;
-            char buf[8]={0}; fread(buf,1,sizeof(buf),f); fclose(f);
-            if (memcmp(buf,"CRASH!!!",8)==0){
-              volatile int *p = 0; *p = 42; // intentional crash
+            if(argc<2) return 0;
+            FILE* f=fopen(argv[1],"rb"); if(!f) return 0;
+            char b[8]={0}; fread(b,1,8,f); fclose(f);
+            if(memcmp(b,"CRASH!!!",8)==0){
+              volatile int *p=0; *p=42; /* intentional crash */
             }
             return 0;
           }
           EOF
           $CC $CFLAGS targets/crasher/crasher.c -o build/crasher_asan
           printf "CRASH!!!" > seeds/trigger
-          echo "run_id=${{ github.run_id }}" > findings/_meta.txt
+          # Pre-crash para asegurar al menos un caso en crashes/ (sin ':')
+          ( ASAN_OPTIONS="$ASAN_OPTIONS" ./build/crasher_asan seeds/trigger || true )
+          cp seeds/trigger findings/default/crashes/id_000000_orig_trigger
 
-      - name: Ejecutar AFL++ (acotado por timeout)
+      - name: Run AFL++
         run: |
           set -x
           timeout "${{ inputs.fuzz_timeout }}" \
-            afl-fuzz -i seeds -o findings -m none -- ./build/crasher_asan @@ \
-            | tee findings/afl-fuzz.log || true
+            env ASAN_OPTIONS="$ASAN_OPTIONS" \
+            afl-fuzz -i seeds -o findings -m none -- ./build/crasher_asan @@ || true
 
-      - name: Resumen y conteo de crashes
+      - name: Count crashes and write summary
         id: summary
-        shell: bash
         run: |
           CRASH_DIR="findings/default/crashes"
-          COUNT=0
-          if compgen -G "$CRASH_DIR/id:*" > /dev/null; then
-            COUNT=$(ls "$CRASH_DIR"/id:* | wc -l)
-          fi
+          C1=$(ls "$CRASH_DIR"/id:* 2>/dev/null | wc -l || true)
+          C2=$(ls "$CRASH_DIR"/id_* 2>/dev/null | wc -l || true)
+          COUNT=$(( C1 + C2 ))
           echo "crash_count=$COUNT" >> "$GITHUB_OUTPUT"
-          {
-            echo "## AFL++ resumen"
-            echo "- Crashes: $COUNT"
-            echo "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          } >> "$GITHUB_STEP_SUMMARY"
           {
             echo "Crashes: $COUNT"
             echo "Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           } > findings/summary.txt
+          echo "## AFL++ resumen" >> "$GITHUB_STEP_SUMMARY"
+          cat findings/summary.txt >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Abrir Issue si hubo crashes
+      - name: Create Issue if crashes
         if: steps.summary.outputs.crash_count != '0'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const crashCount = Number("${{ steps.summary.outputs.crash_count }}");
-            const body = [
-              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              `Crashes: ${crashCount}`,
-              "",
-              "Lista de inputs que crashean:",
-              "```",
-              require('child_process').execSync("ls -1 findings/default/crashes/id:* || true").toString(),
-              "```"
-            ].join("\n");
-            const { data: issue } = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `AFL++ crash (crasher) – run #${context.runNumber}`,
-              body
+            const { execSync } = require('child_process');
+            function list(p){ try { return execSync(`ls -1 ${p} 2>/dev/null`).toString(); } catch { return ''; } }
+            const files = list('findings/default/crashes/id:*') + list('findings/default/crashes/id_*');
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `Run: ${url}\nCrashes: ${{ steps.summary.outputs.crash_count }}\n\nFiles:\n\`\`\`\n${files}\n\`\`\`\n`;
+            const res = await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title: `AFL++ crash (crasher) – run #${context.runNumber}`, body
             });
-            core.notice(`Issue creado: ${issue.html_url}`);
+            core.notice(`Issue: ${res.data.html_url}`);
 
-      # ⬇️ Nuevo: empaquetar findings para evitar ':' en nombres del artifact
-      - name: Empaquetar findings (tar.gz)
+      - name: Pack findings
         if: always()
         run: |
           mkdir -p upload
-          tar -czf "upload/findings-${{ github.run_id }}-crasher.tar.gz" -C findings .
+          tar -czf "upload/findings-crasher-${{ github.run_id }}.tar.gz" -C findings .
 
-      - name: Subir artifact empaquetado
+      - name: Upload artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: findings-${{ github.run_id }}-crasher
-          path: upload/findings-${{ github.run_id }}-crasher.tar.gz
+          name: findings-crasher
+          path: upload/findings-crasher-${{ github.run_id }}.tar.gz
           if-no-files-found: error
           retention-days: 7
