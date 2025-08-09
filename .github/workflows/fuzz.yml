@@ -125,3 +125,99 @@ jobs:
             --label auto-crash \
             --body "$(printf '### 💥 Crash in **%s**\n\n**Input**: `%s`\n\n```text\n%s\n```' "${{ matrix.target }}" "$(basename "$f")" "$(cat "$out")")"
         done
+
+  crasher:
+    name: fuzz (crasher)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    env:
+      AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+      AFL_SKIP_CPUFREQ: "1"
+      CC: afl-clang-fast
+      CFLAGS: -g -O1 -fsanitize=address -fno-omit-frame-pointer
+      ASAN_OPTIONS: abort_on_error=1:halt_on_error=1:detect_leaks=0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install AFL++ and deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y afl++ clang lld build-essential
+
+      - name: Build crasher + seeds + pre-crash
+        run: |
+          set -euxo pipefail
+          mkdir -p build seeds findings/default/crashes targets/crasher
+          cat > targets/crasher/crasher.c <<'EOF'
+          #include <stdio.h>
+          #include <string.h>
+          int main(int argc,char**argv){
+            if(argc<2) return 0;
+            FILE* f=fopen(argv[1],"rb"); if(!f) return 0;
+            char b[8]={0}; fread(b,1,8,f); fclose(f);
+            if(memcmp(b,"CRASH!!!",8)==0){
+              volatile int *p=0; *p=42; /* intentional crash */
+            }
+            return 0;
+          }
+          EOF
+          $CC $CFLAGS targets/crasher/crasher.c -o build/crasher_asan
+          printf "CRASH!!!" > seeds/trigger
+          # Pre-crash para garantizar al menos 1 caso en crashes/ (sin ':')
+          ( ASAN_OPTIONS="$ASAN_OPTIONS" ./build/crasher_asan seeds/trigger || true )
+          cp seeds/trigger findings/default/crashes/id_000000_orig_trigger
+
+      - name: Run AFL++
+        run: |
+          timeout "${{ inputs.fuzz_timeout || '90s' }}" \
+            env ASAN_OPTIONS="$ASAN_OPTIONS" \
+            afl-fuzz -i seeds -o findings -m none -- ./build/crasher_asan @@ || true
+
+      - name: Count crashes
+        id: crashcount
+        run: |
+          CRASH_DIR="findings/default/crashes"
+          C1=$(ls "$CRASH_DIR"/id:* 2>/dev/null | wc -l || true)
+          C2=$(ls "$CRASH_DIR"/id_* 2>/dev/null | wc -l || true)
+          COUNT=$(( C1 + C2 ))
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          {
+            echo "Crashes: $COUNT"
+            echo "Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } > findings/summary.txt
+          echo "## AFL++ resumen (crasher)" >> "$GITHUB_STEP_SUMMARY"
+          cat findings/summary.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create Issue on crash
+        if: steps.crashcount.outputs.count != '0'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { execSync } = require('child_process');
+            function list(p){ try { return execSync(`ls -1 ${p} 2>/dev/null`).toString(); } catch { return ''; } }
+            const files = list('findings/default/crashes/id:*') + list('findings/default/crashes/id_*');
+            const url = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const body = `Run: ${url}\nTarget: crasher\nCrashes: ${"${{ steps.crashcount.outputs.count }}"}\n\nFiles:\n\`\`\`\n${files}\n\`\`\`\n`;
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title: `AFL++ crash – run #${context.runNumber} (crasher)`, body
+            });
+
+      - name: Pack findings (tar.gz)
+        if: always()
+        run: |
+          mkdir -p upload
+          tar -czf "upload/findings-crasher-${GITHUB_RUN_ID}.tar.gz" -C findings .
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: findings-crasher
+          path: upload/findings-crasher-${{ github.run_id }}.tar.gz
+          if-no-files-found: error
+          retention-days: 7
