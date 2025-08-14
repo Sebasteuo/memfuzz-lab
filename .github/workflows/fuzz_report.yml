@@ -7,10 +7,12 @@ on:
 
 jobs:
   report:
+    name: report (${{ matrix.target }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read     # necesario para descargar artifacts de OTRO run
       issues: write
 
     strategy:
@@ -19,29 +21,44 @@ jobs:
         target: [png_parser, xxd]
 
     steps:
-      - name: Descargar artifact de crashes del target
+      - name: Intento 1: descargar artifact "crashes-${{ matrix.target }}"
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
-          # El run terminado que disparó este workflow:
           run-id: ${{ github.event.workflow_run.id }}
           name: crashes-${{ matrix.target }}
-          path: dl/${{ matrix.target }}
+          path: dl/${{ matrix.target }}/crashes
+          if-no-files-found: ignore
+
+      - name: Intento 2: descargar artifacts que empiecen con "findings-${{ matrix.target }}-"
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: findings-${{ matrix.target }}-*
+          path: dl/${{ matrix.target }}/findings
+          merge-multiple: true
           if-no-files-found: ignore
 
       - name: Descomprimir (si existe) y contar crashes
         id: count
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           T="${{ matrix.target }}"
-          AR=$(find "dl/$T" -name '*.tar.gz' -type f | head -n1 || true)
           mkdir -p out/"$T"
+
+          # Busca cualquier .tar.gz descargado (de crashes o de findings)
+          TAR=$(find "dl/$T" -type f -name '*.tar.gz' | head -n1 || true)
+
           COUNT=0
-          if [ -n "$AR" ]; then
-            tar -xzf "$AR" -C out/"$T"
+          if [ -n "${TAR:-}" ]; then
+            tar -xzf "$TAR" -C out/"$T"
             C1=$(ls out/"$T"/default/crashes/id:* 2>/dev/null | wc -l || true)
             C2=$(ls out/"$T"/default/crashes/id_* 2>/dev/null | wc -l || true)
             COUNT=$(( C1 + C2 ))
           fi
+
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           {
             echo "Target: $T"
@@ -55,22 +72,21 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            const T = process.env.TARGET = "${{ matrix.target }}";
-            let list = '';
+            const { execSync } = require('child_process');
+            const T = "${{ matrix.target }}";
+            let files = '';
             try {
-              list = require('child_process')
-                .execSync(`ls -1 out/${T}/default/crashes/id:* out/${T}/default/crashes/id_* 2>/dev/null || true`)
-                .toString();
+              files = execSync(`ls -1 out/${T}/default/crashes/id:* out/${T}/default/crashes/id_* 2>/dev/null || true`).toString();
             } catch (e) {}
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${{ github.event.workflow_run.id }}`;
             const body = [
-              `Pipeline run: ${{ github.event.workflow_run.html_url }}`,
+              `Pipeline run: ${url}`,
               `Target: ${T}`,
               `Crashes: ${{ steps.count.outputs.count }}`,
               "",
               "Inputs que crashean:",
               "```",
-              list,
+              files,
               "```"
             ].join("\n");
             const res = await github.rest.issues.create({
@@ -80,7 +96,7 @@ jobs:
             });
             core.notice(`Issue: ${res.data.html_url}`);
 
-      - name: Subir reporte como artifact
+      - name: Subir reporte como artifact (siempre)
         if: always()
         uses: actions/upload-artifact@v4
         with:
