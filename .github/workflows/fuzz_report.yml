@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      actions: read     # necesario para descargar artifacts de OTRO run
+      actions: read
       issues: write
 
     strategy:
@@ -30,7 +30,7 @@ jobs:
           path: dl/${{ matrix.target }}/crashes
           if-no-files-found: ignore
 
-      - name: Intento 2: descargar artifacts que empiecen con "findings-${{ matrix.target }}-"
+      - name: Intento 2: descargar artifacts "findings-${{ matrix.target }}-*"
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -46,17 +46,24 @@ jobs:
         run: |
           set -euo pipefail
           T="${{ matrix.target }}"
-          mkdir -p out/"$T"
+          # Asegurar que los paths existen para que 'find' no falle con pipefail
+          mkdir -p "dl/$T" "out/$T"
+
+          echo "Contenido descargado (si hay):"
+          ls -R "dl/$T" || true
 
           # Busca cualquier .tar.gz descargado (de crashes o de findings)
           TAR=$(find "dl/$T" -type f -name '*.tar.gz' | head -n1 || true)
 
           COUNT=0
           if [ -n "${TAR:-}" ]; then
-            tar -xzf "$TAR" -C out/"$T"
-            C1=$(ls out/"$T"/default/crashes/id:* 2>/dev/null | wc -l || true)
-            C2=$(ls out/"$T"/default/crashes/id_* 2>/dev/null | wc -l || true)
+            echo "Usando TAR: $TAR"
+            tar -xzf "$TAR" -C "out/$T"
+            C1=$(ls "out/$T"/default/crashes/id:* 2>/dev/null | wc -l || true)
+            C2=$(ls "out/$T"/default/crashes/id_* 2>/dev/null | wc -l || true)
             COUNT=$(( C1 + C2 ))
+          else
+            echo "No se encontró .tar.gz para $T (se generará reporte con Crashes: 0)"
           fi
 
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
@@ -64,7 +71,7 @@ jobs:
             echo "Target: $T"
             echo "Crashes: $COUNT"
             echo "From run: ${{ github.event.workflow_run.html_url }}"
-          } | tee out/"$T"/report.txt
+          } | tee "out/$T/report.txt"
 
       - name: Abrir Issue si hay crashes
         if: steps.count.outputs.count != '0'
