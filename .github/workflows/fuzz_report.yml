@@ -2,7 +2,7 @@ name: Fuzzing Report (post-pipeline)
 
 on:
   workflow_run:
-    workflows: ["Fuzzing Pipeline"]   # ajusta si tu pipeline se llama diferente
+    workflows: ["Fuzzing Pipeline"]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -55,7 +55,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [png_parser, xxd]
+        target: [png_parser, xxd, crasher]   # <-- añadimos crasher
 
     steps:
       - name: Prepare dirs
