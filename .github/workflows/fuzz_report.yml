@@ -64,8 +64,7 @@ jobs:
           T="${{ matrix.target }}"
           mkdir -p "dl/$T" "out/$T"
 
-      # 1) crashes-<target> (si existe)
-      - name: Download crashes artifact
+      - name: Download crashes (exact)
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -74,57 +73,58 @@ jobs:
           path: dl/${{ matrix.target }}/crashes
           if-no-files-found: ignore
 
-      # 2) findings-<target> por NOMBRE EXACTO (ej: findings-crasher)
-      - name: Download findings (exact name)
+      - name: Download findings (exact)
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           run-id: ${{ env.PIPE_RID }}
           name: findings-${{ matrix.target }}
-          path: dl/${{ matrix.target }}/findings_exact
+          path: dl/${{ matrix.target }}/findings-exact
           if-no-files-found: ignore
 
-      # 3) findings que EMPIECEN con findings-<target> (ej: findings-crasher-<RID>)
       - name: Download findings (pattern)
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           run-id: ${{ env.PIPE_RID }}
-          pattern: findings-${{ matrix.target }}*
-          path: dl/${{ matrix.target }}/findings_pat
+          pattern: findings-${{ matrix.target }}-*
+          path: dl/${{ matrix.target }}/findings-pattern
           merge-multiple: true
           if-no-files-found: ignore
 
-      - name: Unpack and count (ALL tars)
+      - name: Unpack and count (extract ALL .tar.gz)
         id: count
         shell: bash
         run: |
           set -euo pipefail
+          shopt -s nullglob
           T="${{ matrix.target }}"
+
           echo "== DL TREE (dl/$T) =="
           ls -R "dl/$T" || true
 
-          COUNT=0
-          # Extrae TODOS los .tar.gz encontrados bajo dl/<target>/*
-          while IFS= read -r -d '' TAR; do
-            echo "Extracting: $TAR"
-            tar -xzf "$TAR" -C "out/$T"
-          done < <(find "dl/$T" -type f -name '*.tar.gz' -print0 2>/dev/null || true)
+          mapfile -t TARS < <(find "dl/$T" -type f -name '*.tar.gz' | sort)
+          echo "Found ${#TARS[@]} tar.gz"
 
-          # Cuenta con id:* (AFL) y id_* (nuestro safe-name)
+          for F in "${TARS[@]}"; do
+            echo ">> Extracting: $F"
+            tar -tzf "$F" | sed 's/^/    TAR: /'
+            tar -xzf "$F" -C "out/$T"
+          done
+
+          echo "== OUT TREE (out/$T) =="
+          ls -R "out/$T" || true
+
           C1=$(ls "out/$T"/default/crashes/id:* 2>/dev/null | wc -l || true)
           C2=$(ls "out/$T"/default/crashes/id_* 2>/dev/null | wc -l || true)
           COUNT=$(( C1 + C2 ))
-
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
           {
             echo "Target: $T"
             echo "Crashes: $COUNT"
             echo "From run: https://github.com/${{ github.repository }}/actions/runs/${{ env.PIPE_RID }}"
           } > "out/$T/report.txt"
-
-          echo "== OUT TREE (out/$T) =="
-          ls -R "out/$T" || true
 
       - name: Open issue if crashes
         if: steps.count.outputs.count != '0'
@@ -132,17 +132,22 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const fs = require('fs');
             const T = "${{ matrix.target }}";
-            const rid = process.env.PIPE_RID;
-            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${rid}`;
-            const body = `Pipeline run: ${url}\nTarget: ${T}\nCrashes: ${{ steps.count.outputs.count }}`;
-            await github.rest.issues.create({
+            let files = '';
+            try {
+              files = fs.readdirSync(`out/${T}/default/crashes`).map(f => `out/${T}/default/crashes/${f}`).join("\n");
+            } catch (e) {}
+            const url = `https://github.com/${{ github.repository }}/actions/runs/${{ env.PIPE_RID }}`;
+            const body = `Pipeline run: ${url}\nTarget: ${T}\nCrashes: ${{ steps.count.outputs.count }}\n\nInputs:\n\`\`\`\n${files}\n\`\`\`\n`;
+            const res = await github.rest.issues.create({
               owner: context.repo.owner, repo: context.repo.repo,
-              title: `AFL++ crash – ${T} (post) – run ${rid}`,
+              title: `AFL++ crash – ${T} (post-pipeline) – run #${{ env.PIPE_RID }}`,
               body
             });
+            core.notice(`Issue: ${res.data.html_url}`);
 
-      - name: Upload target report
+      - name: Upload target report (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
