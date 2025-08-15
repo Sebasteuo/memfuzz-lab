@@ -64,11 +64,14 @@ jobs:
           mkdir -p "dl/$T" "out/$T"
 
       - name: DEBUG – List artifacts from pipeline run
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           echo "Artifacts in run ${{ env.PIPE_RID }}:"
-          gh api repos/${{ github.repository }}/actions/runs/${{ env.PIPE_RID }}/artifacts -q '.artifacts[] | [.name, .size_in_bytes] | @tsv' || true
+          gh api repos/${{ github.repository }}/actions/runs/${{ env.PIPE_RID }}/artifacts \
+            -q '.artifacts[] | [.name, .size_in_bytes] | @tsv' || true
 
-      # --- Descargas por nombre/patrón para 'findings' ---
+      # Findings por nombre y patrones simétricos
       - name: Download findings (exact)
         uses: actions/download-artifact@v4
         continue-on-error: true
@@ -95,7 +98,7 @@ jobs:
           path: dl/${{ matrix.target }}/findings-star-right
           merge-multiple: true
 
-      # --- Descargas para 'crashes' (incluye fallback 'crashes' para crasher) ---
+      # Crashes: nombre por target y fallback 'crashes' para crasher
       - name: Download crashes (<target>)
         uses: actions/download-artifact@v4
         continue-on-error: true
@@ -104,7 +107,7 @@ jobs:
           name: crashes-${{ matrix.target }}
           path: dl/${{ matrix.target }}/crashes-named
 
-      - name: Download crashes (fallback 'crashes' sólo para crasher)
+      - name: Download crashes (fallback 'crashes' for crasher)
         if: matrix.target == 'crasher'
         uses: actions/download-artifact@v4
         continue-on-error: true
