@@ -126,7 +126,7 @@ jobs:
             --body "$(printf '### 💥 Crash in **%s**\n\n**Input**: `%s`\n\n```text\n%s\n```' "${{ matrix.target }}" "$(basename "$f")" "$(cat "$out")")"
         done
 
-  crasher:
+  crasher_old:
     name: fuzz (crasher)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -221,3 +221,69 @@ jobs:
           path: upload/findings-crasher-${{ github.run_id }}.tar.gz
           if-no-files-found: error
           retention-days: 7
+
+  crasher:
+    name: fuzz (crasher)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    env:
+      AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+      AFL_SKIP_CPUFREQ: "1"
+      CC: afl-clang-fast
+      CFLAGS: -g -O1 -fsanitize=address -fno-omit-frame-pointer
+      ASAN_OPTIONS: abort_on_error=1:halt_on_error=1:detect_leaks=0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install AFL++ and deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y afl++ clang lld build-essential
+
+      - name: Build crasher + seed + pre-crash
+        run: |
+          set -euxo pipefail
+          mkdir -p build seeds findings/default/crashes targets/crasher
+          cat > targets/crasher/crasher.c <<'EOF'
+          #include <stdio.h>
+          #include <string.h>
+          int main(int argc,char**argv){
+            if(argc<2) return 0;
+            FILE* f=fopen(argv[1],"rb"); if(!f) return 0;
+            char b[8]={0}; fread(b,1,8,f); fclose(f);
+            if(memcmp(b,"CRASH!!!",8)==0){
+              volatile int *p=0; *p=42; /* intentional crash */
+            }
+            return 0;
+          }
+          EOF
+          $CC $CFLAGS targets/crasher/crasher.c -o build/crasher_asan
+          printf "CRASH!!!" > seeds/trigger
+          # Fuerza un crash (ASan) y deja una muestra en crashes/ con nombre seguro
+          ( ASAN_OPTIONS="$ASAN_OPTIONS" ./build/crasher_asan seeds/trigger || true )
+          cp seeds/trigger findings/default/crashes/id_000000_orig_trigger
+
+      - name: AFL++ (short)
+        run: |
+          set -x
+          timeout "${{ inputs.fuzz_timeout || '90s' }}" \
+            env ASAN_OPTIONS="$ASAN_OPTIONS" \
+            afl-fuzz -i seeds -o findings -m none -- ./build/crasher_asan @@ || true
+
+      - name: Pack findings
+        run: |
+          mkdir -p upload
+          tar -czf "upload/findings-crasher-${{ github.run_id }}.tar.gz" -C findings .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: findings-crasher
+          path: upload/findings-crasher-${{ github.run_id }}.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
