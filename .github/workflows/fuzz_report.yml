@@ -6,13 +6,40 @@ on:
     types: [completed]
 
 jobs:
+  meta:
+    name: post-meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Crear meta/reporte
+        run: |
+          mkdir -p out/meta
+          {
+            echo "Post-pipeline meta"
+            echo "From pipeline run: ${{ github.event.workflow_run.html_url }}"
+            echo "Pipeline RID: ${{ github.event.workflow_run.id }}"
+            echo "This run_id (post): ${{ github.run_id }}"
+          } | tee out/meta/report.txt
+          ls -l out/meta
+      - name: Subir artifact meta (garantizado)
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-meta-${{ github.event.workflow_run.id }}
+          path: out/meta
+          if-no-files-found: error
+          retention-days: 7
+
   report:
     name: report (${{ matrix.target }})
+    needs: meta
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      actions: read
+      actions: write
       issues: write
 
     strategy:
@@ -22,7 +49,6 @@ jobs:
 
     steps:
       - name: Preparar carpetas
-        shell: bash
         run: |
           set -euo pipefail
           T="${{ matrix.target }}"
@@ -49,7 +75,6 @@ jobs:
 
       - name: Descomprimir y contar crashes
         id: count
-        shell: bash
         run: |
           set -euo pipefail
           T="${{ matrix.target }}"
@@ -83,18 +108,22 @@ jobs:
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+        # Nota: github-script usa Node; no necesita 'actions' especiales para abrir Issues
           script: |
             const { execSync } = require('child_process');
             const T = "${{ matrix.target }}";
             let files = '';
-            try { files = execSync(`ls -1 out/${T}/default/crashes/id:* out/${T}/default/crashes/id_* 2>/dev/null || true`).toString(); } catch (e) {}
+            try {
+              files = execSync(`ls -1 out/${T}/default/crashes/id:* out/${T}/default/crashes/id_* 2>/dev/null || true`).toString();
+            } catch (e) {}
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${{ github.event.workflow_run.id }}`;
             const body = `Pipeline run: ${url}\nTarget: ${T}\nCrashes: ${{ steps.count.outputs.count }}\n\nInputs:\n\`\`\`\n${files}\n\`\`\`\n`;
-            await github.rest.issues.create({
+            const res = await github.rest.issues.create({
               owner: context.repo.owner, repo: context.repo.repo,
               title: `AFL++ crash – ${T} (post-pipeline) – run #${{ github.event.workflow_run.run_number }}`,
               body
             });
+            core.notice(`Issue: ${res.data.html_url}`);
 
       - name: Subir reporte como artifact (siempre)
         if: always()
