@@ -71,7 +71,7 @@ jobs:
           gh api repos/${{ github.repository }}/actions/runs/${{ env.PIPE_RID }}/artifacts \
             -q '.artifacts[] | [.name, .size_in_bytes] | @tsv' || true
 
-      # Findings por nombre y patrones simétricos
+      # Findings by name and symmetric patterns
       - name: Download findings (exact)
         uses: actions/download-artifact@v4
         continue-on-error: true
@@ -98,7 +98,7 @@ jobs:
           path: dl/${{ matrix.target }}/findings-star-right
           merge-multiple: true
 
-      # Crashes: nombre por target y fallback 'crashes' para crasher
+      # Crashes: per-target name and 'crashes' fallback for crasher
       - name: Download crashes (<target>)
         uses: actions/download-artifact@v4
         continue-on-error: true
