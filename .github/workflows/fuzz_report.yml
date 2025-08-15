@@ -37,7 +37,6 @@ jobs:
         with:
           name: post-meta-${{ env.PIPE_RID }}
           path: out/meta
-          if-no-files-found: error
           retention-days: 7
 
   report:
@@ -64,15 +63,12 @@ jobs:
           T="${{ matrix.target }}"
           mkdir -p "dl/$T" "out/$T"
 
-      - name: Download crashes (exact)
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          run-id: ${{ env.PIPE_RID }}
-          name: crashes-${{ matrix.target }}
-          path: dl/${{ matrix.target }}/crashes
-          if-no-files-found: ignore
+      - name: DEBUG – List artifacts from pipeline run
+        run: |
+          echo "Artifacts in run ${{ env.PIPE_RID }}:"
+          gh api repos/${{ github.repository }}/actions/runs/${{ env.PIPE_RID }}/artifacts -q '.artifacts[] | [.name, .size_in_bytes] | @tsv' || true
 
+      # --- Descargas por nombre/patrón para 'findings' ---
       - name: Download findings (exact)
         uses: actions/download-artifact@v4
         continue-on-error: true
@@ -80,17 +76,42 @@ jobs:
           run-id: ${{ env.PIPE_RID }}
           name: findings-${{ matrix.target }}
           path: dl/${{ matrix.target }}/findings-exact
-          if-no-files-found: ignore
 
-      - name: Download findings (pattern)
+      - name: Download findings (*-<target>)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          run-id: ${{ env.PIPE_RID }}
+          pattern: findings-*-${{ matrix.target }}
+          path: dl/${{ matrix.target }}/findings-star-left
+          merge-multiple: true
+
+      - name: Download findings (<target>-*)
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           run-id: ${{ env.PIPE_RID }}
           pattern: findings-${{ matrix.target }}-*
-          path: dl/${{ matrix.target }}/findings-pattern
+          path: dl/${{ matrix.target }}/findings-star-right
           merge-multiple: true
-          if-no-files-found: ignore
+
+      # --- Descargas para 'crashes' (incluye fallback 'crashes' para crasher) ---
+      - name: Download crashes (<target>)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          run-id: ${{ env.PIPE_RID }}
+          name: crashes-${{ matrix.target }}
+          path: dl/${{ matrix.target }}/crashes-named
+
+      - name: Download crashes (fallback 'crashes' sólo para crasher)
+        if: matrix.target == 'crasher'
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          run-id: ${{ env.PIPE_RID }}
+          name: crashes
+          path: dl/${{ matrix.target }}/crashes-fallback
 
       - name: Unpack and count (extract ALL .tar.gz)
         id: count
@@ -104,12 +125,12 @@ jobs:
           ls -R "dl/$T" || true
 
           mapfile -t TARS < <(find "dl/$T" -type f -name '*.tar.gz' | sort)
-          echo "Found ${#TARS[@]} tar.gz"
+          echo "Found ${#TARS[@]} tar.gz under dl/$T"
 
           for F in "${TARS[@]}"; do
             echo ">> Extracting: $F"
-            tar -tzf "$F" | sed 's/^/    TAR: /'
-            tar -xzf "$F" -C "out/$T"
+            tar -tzf "$F" | sed 's/^/    TAR: /' || true
+            tar -xzf "$F" -C "out/$T" || true
           done
 
           echo "== OUT TREE (out/$T) =="
@@ -153,5 +174,4 @@ jobs:
         with:
           name: report-${{ matrix.target }}-${{ env.PIPE_RID }}
           path: out/${{ matrix.target }}
-          if-no-files-found: warn
           retention-days: 7
