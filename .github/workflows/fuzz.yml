@@ -30,7 +30,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y afl++ libpng-dev
 
-    # ─────────── compilar según el target ───────────
+    # ----------- build according to the target -----------
     - name: Build target (ASan)
       shell: bash
       run: |
@@ -48,7 +48,7 @@ jobs:
                 -o targets/xxd/build/xxd
         fi
 
-    # ─────────── ejecutar AFL++ ───────────
+    # ----------- ejecutar AFL++ -----------
     - name: Run AFL++
       shell: bash
       env:
@@ -76,7 +76,7 @@ jobs:
             || [ $? = 124 ]
         fi
 
-    # ─────────── empaquetar crashes ───────────
+    # ----------- empaquetar crashes -----------
     - name: Package crashes
       id: pkg
       shell: bash
@@ -96,7 +96,7 @@ jobs:
         name: crashes-${{ matrix.target }}
         path: crashes-${{ matrix.target }}.tar.gz
 
-    # ─────────── simbolizar y crear Issue ───────────
+    # ----------- simbolizar y crear Issue -----------
     - name: Symbolize & create Issue
       if: steps.pkg.outputs.has_crash == 'true'
       shell: bash
@@ -166,7 +166,7 @@ jobs:
           EOF
           $CC $CFLAGS targets/crasher/crasher.c -o build/crasher_asan
           printf "CRASH!!!" > seeds/trigger
-          # Pre-crash para garantizar al menos 1 caso en crashes/ (sin ':')
+          # Pre-crash to garantizar at least 1 caso en crashes/ (no ':')
           ( ASAN_OPTIONS="$ASAN_OPTIONS" ./build/crasher_asan seeds/trigger || true )
           cp seeds/trigger findings/default/crashes/id_000000_orig_trigger
 

@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       fuzz_timeout:
-        description: "Duración de afl-fuzz (ej. 90s, 2m)"
+        description: "afl-fuzz duration (e.g., 90s, 2m)"
         required: false
         default: "90s"
 
@@ -48,7 +48,7 @@ jobs:
           EOF
           $CC $CFLAGS targets/crasher/crasher.c -o build/crasher_asan
           printf "CRASH!!!" > seeds/trigger
-          # Pre-crash para asegurar al menos un caso en crashes/ (sin ':')
+          # Pre-crash to asegurar at least one caso en crashes/ (no ':')
           ( ASAN_OPTIONS="$ASAN_OPTIONS" ./build/crasher_asan seeds/trigger || true )
           cp seeds/trigger findings/default/crashes/id_000000_orig_trigger
 
