@@ -105,3 +105,4 @@ jobs:
           path: upload/findings-crasher-${{ github.run_id }}.tar.gz
           if-no-files-found: error
           retention-days: 7
+          overwrite: true
