@@ -55,7 +55,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [png_parser, xxd, crasher]   # <-- añadimos crasher
+        target: [png_parser, xxd, crasher]
 
     steps:
       - name: Prepare dirs
@@ -64,6 +64,7 @@ jobs:
           T="${{ matrix.target }}"
           mkdir -p "dl/$T" "out/$T"
 
+      # 1) crashes-<target> (si existe)
       - name: Download crashes artifact
         uses: actions/download-artifact@v4
         continue-on-error: true
@@ -73,39 +74,57 @@ jobs:
           path: dl/${{ matrix.target }}/crashes
           if-no-files-found: ignore
 
-      - name: Download findings artifacts
+      # 2) findings-<target> por NOMBRE EXACTO (ej: findings-crasher)
+      - name: Download findings (exact name)
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           run-id: ${{ env.PIPE_RID }}
-          pattern: findings-${{ matrix.target }}-*
-          path: dl/${{ matrix.target }}/findings
+          name: findings-${{ matrix.target }}
+          path: dl/${{ matrix.target }}/findings_exact
+          if-no-files-found: ignore
+
+      # 3) findings que EMPIECEN con findings-<target> (ej: findings-crasher-<RID>)
+      - name: Download findings (pattern)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          run-id: ${{ env.PIPE_RID }}
+          pattern: findings-${{ matrix.target }}*
+          path: dl/${{ matrix.target }}/findings_pat
           merge-multiple: true
           if-no-files-found: ignore
 
-      - name: Unpack and count
+      - name: Unpack and count (ALL tars)
         id: count
+        shell: bash
         run: |
           set -euo pipefail
           T="${{ matrix.target }}"
-          echo "== dl/$T =="
+          echo "== DL TREE (dl/$T) =="
           ls -R "dl/$T" || true
-          TAR=$(find "dl/$T" -type f -name '*.tar.gz' | head -n1 || true)
+
           COUNT=0
-          if [ -n "${TAR:-}" ]; then
+          # Extrae TODOS los .tar.gz encontrados bajo dl/<target>/*
+          while IFS= read -r -d '' TAR; do
+            echo "Extracting: $TAR"
             tar -xzf "$TAR" -C "out/$T"
-            C1=$(ls "out/$T"/default/crashes/id:* 2>/dev/null | wc -l || true)
-            C2=$(ls "out/$T"/default/crashes/id_* 2>/dev/null | wc -l || true)
-            COUNT=$(( C1 + C2 ))
-          fi
+          done < <(find "dl/$T" -type f -name '*.tar.gz' -print0 2>/dev/null || true)
+
+          # Cuenta con id:* (AFL) y id_* (nuestro safe-name)
+          C1=$(ls "out/$T"/default/crashes/id:* 2>/dev/null | wc -l || true)
+          C2=$(ls "out/$T"/default/crashes/id_* 2>/dev/null | wc -l || true)
+          COUNT=$(( C1 + C2 ))
+
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           {
             echo "Target: $T"
             echo "Crashes: $COUNT"
             echo "From run: https://github.com/${{ github.repository }}/actions/runs/${{ env.PIPE_RID }}"
           } > "out/$T/report.txt"
-          echo "== out/$T =="
-          ls -l "out/$T" || true
+
+          echo "== OUT TREE (out/$T) =="
+          ls -R "out/$T" || true
 
       - name: Open issue if crashes
         if: steps.count.outputs.count != '0'
