@@ -15,3 +15,35 @@ local_out/
 crashes*
 *.tar.gz
 *.zip
+# Build & fuzz outputs
+/build/
+/findings/
+/seeds/
+/out/
+/dl/
+/obj/
+/inst/
+afl-*
+*.tar.gz
+*.zip
+
+# CI download dirs (local)
+post_artifacts_*/
+pipe_artifacts_*/
+
+# Common noise
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+*.bin
+core
+core.*
+vgcore.*
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
