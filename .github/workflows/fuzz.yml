@@ -11,6 +11,7 @@ on:
 jobs:
   fuzz:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         include:
@@ -21,7 +22,7 @@ jobs:
       OUT_DIR: out/default
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - name: Install AFL++ and libpng
         run: |
           sudo apt-get update
@@ -77,8 +78,9 @@ jobs:
         run: "echo \"\U0001F4E6 Packaging crashes (if any)…\"\nif compgen -G '${OUT_DIR}/crashes/id:*' > /dev/null; then\n  tar -czf crashes-${{ matrix.target }}.tar.gz -C ${OUT_DIR} crashes\n  echo \"has_crash=true\" >> \"$GITHUB_OUTPUT\"\nelse\n  echo \"has_crash=false\" >> \"$GITHUB_OUTPUT\"\nfi\n"
       - name: Upload crashes artefact
         if: steps.pkg.outputs.has_crash == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
+        retention-days: 14
           name: crashes-${{ matrix.target }}
           path: crashes-${{ matrix.target }}.tar.gz
       # ----------- simbolizar y crear Issue -----------
@@ -102,7 +104,7 @@ jobs:
       CFLAGS: -g -O1 -fsanitize=address -fno-omit-frame-pointer
       ASAN_OPTIONS: abort_on_error=1:halt_on_error=1:detect_leaks=0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - name: Install AFL++ and deps
         run: |
           sudo apt-get update
@@ -170,8 +172,9 @@ jobs:
           tar -czf "upload/findings-crasher-${GITHUB_RUN_ID}.tar.gz" -C findings .
       - name: Upload artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
+        retention-days: 14
           name: findings-crasher
           path: upload/findings-crasher-${{ github.run_id }}.tar.gz
           if-no-files-found: error
@@ -191,7 +194,7 @@ jobs:
       CFLAGS: -g -O1 -fsanitize=address -fno-omit-frame-pointer
       ASAN_OPTIONS: abort_on_error=1:halt_on_error=1:detect_leaks=0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
       - name: Install AFL++ and deps
         run: |
           sudo apt-get update
@@ -229,8 +232,9 @@ jobs:
           mkdir -p upload
           tar -czf "upload/findings-crasher-${{ github.run_id }}.tar.gz" -C findings .
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
+        retention-days: 14
           name: findings-crasher
           path: upload/findings-crasher-${{ github.run_id }}.tar.gz
           if-no-files-found: error
