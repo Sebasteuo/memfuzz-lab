@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# memfuzz-lab helper script
+# All output and comments are in English.
+set -euo pipefail
+IFS=$'
+	'
 set -eux
 cd "$(dirname "$0")"        #  Change the current working directory to targets/qemu_elf
 mkdir -p build
