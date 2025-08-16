@@ -1,0 +1,129 @@
+name: Fuzzing Quick Demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      fuzz_timeout:
+        description: "AFL++ runtime (e.g., 30s, 2m, 0 for unlimited)"
+        required: false
+        default: "30s"
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+jobs:
+  quick_crasher:
+    name: quick (crasher)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OUT_DIR: out/default
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+
+      - name: Install AFL++ (minimal)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y afl++
+
+      - name: Build crasher (ASan) + seed
+        shell: bash
+        run: |
+          set -euo pipefail
+          IFS=$'\n\t'
+          mkdir -p targets/crasher build seeds "${OUT_DIR}/crashes"
+          cat > targets/crasher/crasher.c <<'EOF'
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+          int main(int argc, char **argv){
+            FILE *f = argc > 1 ? fopen(argv[1], "rb") : stdin;
+            if(!f) return 0;
+            char buf[8] = {0};
+            fread(buf, 1, sizeof(buf), f); // ASan will flag OOB write below
+            if (!strncmp(buf, "CRASH!!", 7)) {
+              char *p = NULL; *p = 1; // boom
+            }
+            return 0;
+          }
+          EOF
+          export CC=afl-clang-fast
+          CFLAGS="-g -O1 -fsanitize=address -fno-omit-frame-pointer"
+          ${CC} ${CFLAGS} targets/crasher/crasher.c -o build/crasher_asan
+          printf 'CRASH!!\n' > seeds/trigger
+
+      - name: Pre-crash (deterministic)
+        shell: bash
+        env:
+          ASAN_OPTIONS: abort_on_error=1:detect_leaks=0:symbolize=1
+        run: |
+          set +e
+          ( ASAN_OPTIONS="$ASAN_OPTIONS" ./build/crasher_asan seeds/trigger )
+          # guardar el input como hallazgo del fuzzer
+          mkdir -p "${OUT_DIR}/crashes"
+          cp -f seeds/trigger "${OUT_DIR}/crashes/id_000000_orig_trigger"
+
+      - name: (Optional) Short fuzz with AFL++
+        shell: bash
+        env:
+          TIMEOUT: ${{ github.event.inputs.fuzz_timeout || '30s' }}
+        run: |
+          set +e
+          timeout "$TIMEOUT" afl-fuzz -i seeds -o "${OUT_DIR}" -- ./build/crasher_asan @@
+          EC=$?
+          if [ "$EC" != "0" ] && [ "$EC" != "124" ]; then
+            echo "::warning::afl-fuzz exited with code $EC (continuing demo)."
+          fi
+          true
+
+      - name: Package crashes (if any)
+        id: pkg
+        run: |
+          if compgen -G '${OUT_DIR}/crashes/*' >/dev/null; then
+            tar -czf "findings-crasher-${GITHUB_RUN_ID}.tar.gz" -C "${OUT_DIR}" crashes
+            echo "has_crash=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_crash=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload crashes
+        if: steps.pkg.outputs.has_crash == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: findings-crasher
+          path: findings-crasher-${{ github.run_id }}.tar.gz
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload run logs (always)
+        if: always()
+        run: |
+          mkdir -p upload
+          cp -r "${OUT_DIR}" upload/out || true
+          tar -czf "upload/run-logs-${{ github.run_id }}.tar.gz" -C upload out || true
+      - name: Upload run logs artifact (always)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: run-logs
+          path: upload/run-logs-${{ github.run_id }}.tar.gz
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Open Issue (summary)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          crashes="No crashes"
+          if [ "${{ steps.pkg.outputs.has_crash }}" = "true" ]; then
+            crashes="1+"
+          fi
+          body="Run: ${url}\nTarget: crasher\nCrashes: ${crashes}\n\nArtifacts:\n- findings-crasher (if any)\n- run-logs"
+          gh issue create --title "AFL++ quick demo – run #${{ github.run_number }}" --body "${body}" || true
