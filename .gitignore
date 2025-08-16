@@ -54,3 +54,14 @@ targets/*/build/
 *.tar.gz
 *.zip
 *.log
+# === memfuzz-lab: artefactos / builds locales ===
+out/
+build/
+targets/*/build/
+# Paquetes y logs locales
+*.tar.gz
+*.zip
+*.log
+# AFL++ salidas locales (por si alguien corre fuera de out/)
+default/
+findings/
