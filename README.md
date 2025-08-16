@@ -28,6 +28,14 @@ Every push runs fuzzing jobs (native and cross-arch with QEMU), uploads crash ar
 > - **Fuzzing Quick Demo** (`fuzz_quick.yml`) – manual run, guarantees a crash, always uploads artifacts & opens an Issue. Great for trying it out in 1 minute.
 > - **Fuzzing Pipeline** (`fuzz.yml`) – full multi-target fuzzing (`png_parser`, `xxd`, `crasher`), runs on push to `main`.
 
+## Quick demo (one-click)
+If you just want to try it in 30–60s:
+
+- Go to **Actions → Fuzzing Quick Demo → Run workflow**, keep the default `fuzz_timeout=30s`, and run it on `main`.
+- Or from CLI:  
+  ```bash
+  gh workflow run '.github/workflows/fuzz_quick.yml' -f fuzz_timeout='30s' --ref main
+
 
 ## Quick start
 1. Push changes → triggers the main fuzzing pipeline (`.github/workflows/fuzz.yml`).
