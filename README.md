@@ -2,6 +2,9 @@
 
 [![Fuzzing Pipeline](https://github.com/Sebasteuo/memfuzz-lab/actions/workflows/fuzz.yml/badge.svg)](https://github.com/Sebasteuo/memfuzz-lab/actions/workflows/fuzz.yml)
 
+![Fuzzing Quick Demo](https://github.com/Sebasteuo/memfuzz-lab/actions/workflows/fuzz_quick.yml/badge.svg)
+
+
 > ℹ️ **Note:** The `fuzz.yml` badge may often show **failing**.  
 > This is expected — a “failure” indicates that AFL++ successfully triggered crashes.  
 > Crashes are packaged as artifacts and GitHub Issues are opened automatically for triage.
@@ -12,6 +15,9 @@
 
 **memfuzz-lab** is a CI-driven fuzzing lab that integrates **AFL++**, **AddressSanitizer**, **QEMU-user mode**,and **GitHub Actions**.  
 Every push runs fuzzing jobs (native and cross-arch with QEMU), uploads crash artifacts, and automatically opens Issues with stack traces and reproducible inputs.
+This repo provides two workflows:
+– Fuzzing Quick Demo (fuzz_quick.yml): always produces a crash + artifacts (easy to try).
+– Fuzzing Pipeline (fuzz.yml): full multi-target fuzzing, runs on push.
 
 ---
 
@@ -27,6 +33,8 @@ Every push runs fuzzing jobs (native and cross-arch with QEMU), uploads crash ar
 > ℹ️ This repo provides two workflows:
 > - **Fuzzing Quick Demo** (`fuzz_quick.yml`) – manual run, guarantees a crash, always uploads artifacts & opens an Issue. Great for trying it out in 1 minute.
 > - **Fuzzing Pipeline** (`fuzz.yml`) – full multi-target fuzzing (`png_parser`, `xxd`, `crasher`), runs on push to `main`.
+
+The docker/ and vagrant/ folders provide optional environments for local reproduction.
 
 ## Quick demo (one-click)
 If you just want to try it in 30–60s:
