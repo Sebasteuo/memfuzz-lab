@@ -47,3 +47,10 @@ vgcore.*
 .idea/
 *.swp
 .DS_Store
+# Builds y artefactos locales
+out/
+build/
+targets/*/build/
+*.tar.gz
+*.zip
+*.log
