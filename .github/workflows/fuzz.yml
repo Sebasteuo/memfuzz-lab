@@ -1,25 +1,13 @@
 name: Fuzzing Pipeline
 on:
-  workflow_dispatch:
-    inputs:
-      fuzz_timeout:
-        description: "AFL++ runtime (e.g., 2m, 5m, 10m, 0 for unlimited)"
-        required: false
-        default: "2m"
-  workflow_dispatch:
-    inputs:
-      fuzz_timeout:
-        description: "AFL++ runtime (e.g., 2m, 5m, 10m, 0 for unlimited)"
-        required: false
-        default: "2m"
-  workflow_dispatch:
-    inputs:
-      fuzz_timeout:
-        description: "Max fuzzing time (e.g. 30s, 5m, 0 = unlimited)"
-        default: "30s"
-        required: false
   push:
-    branches: [main]
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      fuzz_timeout:
+        description: "AFL++ runtime (e.g., 2m, 5m, 10m, 0 for unlimited)"
+        required: false
+        default: "2m"
 jobs:
   fuzz:
     runs-on: ubuntu-latest
