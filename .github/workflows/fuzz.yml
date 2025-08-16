@@ -148,7 +148,7 @@ jobs:
             echo "Crashes: $COUNT"
             echo "Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } > findings/summary.txt
-          echo "## AFL++ resumen (crasher)" >> "$GITHUB_STEP_SUMMARY"
+          echo "## AFL++ summary (crasher)" >> "$GITHUB_STEP_SUMMARY"
           cat findings/summary.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Create Issue on crash
         if: steps.crashcount.outputs.count != '0'
