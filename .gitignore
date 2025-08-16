@@ -11,3 +11,4 @@ targets/*/build/
 # AFL++ default dirs (just in case someone runs outside `out/`)
 default/
 findings/
+*.bak
