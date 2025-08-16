@@ -1,3 +1,9 @@
+#!/usr/bin/env bash
+# memfuzz-lab helper script
+# All output and comments are in English.
+set -euo pipefail
+IFS=$'
+	'
 export CC=afl-clang-fast
 export CXX=afl-clang-fast++
 #!/usr/bin/env bash
