@@ -5,8 +5,8 @@
 ![Fuzzing Quick Demo](https://github.com/Sebasteuo/memfuzz-lab/actions/workflows/fuzz_quick.yml/badge.svg)
 
 
-> ℹ️ **Note:** The `fuzz.yml` badge may often show **failing**.  
-> This is expected — a “failure” indicates that AFL++ successfully triggered crashes.  
+> **Note:** The `fuzz.yml` badge may often show **failing**.  
+> This is expected a “failure” indicates that AFL++ successfully triggered crashes.  
 > Crashes are packaged as artifacts and GitHub Issues are opened automatically for triage.
 
 <p align="center">
@@ -30,7 +30,7 @@ This repo provides two workflows:
 
 ---
 
-> ℹ️ This repo provides two workflows:
+> This repo provides two workflows:
 > - **Fuzzing Quick Demo** (`fuzz_quick.yml`) – manual run, guarantees a crash, always uploads artifacts & opens an Issue. Great for trying it out in 1 minute.
 > - **Fuzzing Pipeline** (`fuzz.yml`) – full multi-target fuzzing (`png_parser`, `xxd`, `crasher`), runs on push to `main`.
 
