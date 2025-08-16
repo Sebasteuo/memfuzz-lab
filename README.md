@@ -1,13 +1,9 @@
 # memfuzz-lab
 
-[![Fuzzing Pipeline](https://github.com/Sebasteuo/memfuzz-lab/actions/workflows/fuzz.yml/badge.svg)](https://github.com/Sebasteuo/memfuzz-lab/actions/workflows/fuzz.yml)
 
 ![Fuzzing Quick Demo](https://github.com/Sebasteuo/memfuzz-lab/actions/workflows/fuzz_quick.yml/badge.svg)
 
 
-> **Note:** The `fuzz.yml` badge may often show **failing**.  
-> This is expected a “failure” indicates that AFL++ successfully triggered crashes.  
-> Crashes are packaged as artifacts and GitHub Issues are opened automatically for triage.
 
 <p align="center">
   <img src="docs/images/memfuzz-hero.png" width="860" alt="memfuzz-lab illustration"/>
