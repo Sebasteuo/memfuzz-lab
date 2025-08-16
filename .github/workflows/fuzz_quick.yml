@@ -35,7 +35,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          IFS=$'\n\t'
           mkdir -p targets/crasher build seeds "${OUT_DIR}/crashes"
           cat > targets/crasher/crasher.c <<'EOF'
           #include <stdio.h>
@@ -45,9 +44,9 @@ jobs:
             FILE *f = argc > 1 ? fopen(argv[1], "rb") : stdin;
             if(!f) return 0;
             char buf[8] = {0};
-            fread(buf, 1, sizeof(buf), f); // ASan will flag OOB write below
+            fread(buf, 1, sizeof(buf), f);
             if (!strncmp(buf, "CRASH!!", 7)) {
-              char *p = NULL; *p = 1; // boom
+              char *p = NULL; *p = 1; // force segfault
             }
             return 0;
           }
@@ -64,11 +63,11 @@ jobs:
         run: |
           set +e
           ( ASAN_OPTIONS="$ASAN_OPTIONS" ./build/crasher_asan seeds/trigger )
-          # guardar el input como hallazgo del fuzzer
+          # ensure demo crash file exists in OUT_DIR
           mkdir -p "${OUT_DIR}/crashes"
           cp -f seeds/trigger "${OUT_DIR}/crashes/id_000000_orig_trigger"
 
-      - name: (Optional) Short fuzz with AFL++
+      - name: Short fuzz with AFL++ (non-fatal)
         shell: bash
         env:
           TIMEOUT: ${{ github.event.inputs.fuzz_timeout || '30s' }}
@@ -81,23 +80,16 @@ jobs:
           fi
           true
 
-      - name: Package crashes (if any)
-        id: pkg
+      - name: Package crashes (always)
         run: |
-          if compgen -G '${OUT_DIR}/crashes/*' >/dev/null; then
-            tar -czf "findings-crasher-${GITHUB_RUN_ID}.tar.gz" -C "${OUT_DIR}" crashes
-            echo "has_crash=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_crash=false" >> "$GITHUB_OUTPUT"
-          fi
+          tar -czf "findings-crasher-${GITHUB_RUN_ID}.tar.gz" -C "${OUT_DIR}" crashes
 
-      - name: Upload crashes
-        if: steps.pkg.outputs.has_crash == 'true'
+      - name: Upload crashes artifact (always)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: findings-crasher
           path: findings-crasher-${{ github.run_id }}.tar.gz
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 7
 
       - name: Upload run logs (always)
@@ -106,6 +98,7 @@ jobs:
           mkdir -p upload
           cp -r "${OUT_DIR}" upload/out || true
           tar -czf "upload/run-logs-${{ github.run_id }}.tar.gz" -C upload out || true
+
       - name: Upload run logs artifact (always)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -121,9 +114,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          crashes="No crashes"
-          if [ "${{ steps.pkg.outputs.has_crash }}" = "true" ]; then
-            crashes="1+"
-          fi
-          body="Run: ${url}\nTarget: crasher\nCrashes: ${crashes}\n\nArtifacts:\n- findings-crasher (if any)\n- run-logs"
+          body="Run: ${url}\nTarget: crasher\nCrashes: 1+\n\nArtifacts:\n- findings-crasher\n- run-logs"
           gh issue create --title "AFL++ quick demo – run #${{ github.run_number }}" --body "${body}" || true
